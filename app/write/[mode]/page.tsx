@@ -8,7 +8,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { useParams } from "next/navigation"
 import { useAuth } from "@/components/firebase-auth-provider"
-import { saveDiaryEntry, DiaryEntry } from "@/lib/firebase"
+import { saveDiaryEntry, DiaryEntry } from '@/lib/firebase'
 
 const modeConfigs = {
   madness: {
@@ -56,6 +56,7 @@ export default function WritePage() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle")
+  const [isLoading, setIsLoading] = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
 
@@ -79,9 +80,15 @@ export default function WritePage() {
     window.addEventListener("pointerdown", handleFirstInteraction, { once: true })
     window.addEventListener("keydown", handleFirstInteraction, { once: true })
 
+    // Simulate loading time for better UX
+    const loadingTimer = setTimeout(() => {
+      setIsLoading(false)
+    }, 800)
+
     return () => {
       window.removeEventListener("pointerdown", handleFirstInteraction)
       window.removeEventListener("keydown", handleFirstInteraction)
+      clearTimeout(loadingTimer)
     }
   }, [])
 
@@ -148,8 +155,10 @@ export default function WritePage() {
     const effects: React.CSSProperties = {}
     
     // Add glitch effects based on corruption level
-    if (level > 2) {
+    if (level > 2 && level <= 6) {
       effects.animation = `glitch ${0.3 + level * 0.1}s infinite`
+    } else if (level > 6) {
+      effects.animation = `intense-glitch ${0.2 + level * 0.05}s infinite`
     }
     
     // Add flicker effects
@@ -164,14 +173,65 @@ export default function WritePage() {
     
     // Add text shadow for corruption effect
     if (level > 1) {
-      effects.textShadow = `0 0 ${level * 2}px rgba(255, 0, 255, ${level * 0.1})`
+      effects.textShadow = `0 0 ${level * 2}px rgba(75, 85, 99, ${level * 0.2})`
     }
     
     return effects
   }
 
+  // Generate random symbols for background corruption
+  const generateBackgroundSymbols = (level: number) => {
+    if (level === 0) return []
+    
+    const symbols = ["█", "▓", "▒", "░", "◆", "◇", "◈", "◉", "◎", "●", "○", "◦", "∴", "∵", "∶", "∷", "∸", "∹", "∺", "∻", "ǝ", "ɹ", "ʇ", "ʎ", "ɐ", "ɯ", "ɔ", "ɟ", "ɓ", "ɗ", "ɠ", "ɦ", "ɨ", "ɪ", "ɫ", "ɬ", "ɭ", "ɮ", "ɯ", "ɰ"]
+    
+    // Check if mobile device
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+    
+    // Progressive symbol count based on corruption level (reduced for mobile)
+    let count = 0
+    if (isMobile) {
+      // Mobile: fewer symbols to avoid performance issues
+      if (level <= 3) {
+        count = Math.floor(level * 0.8) // 0-2 symbols
+      } else if (level <= 6) {
+        count = 4 + Math.floor((level - 3) * 1.5) // 4-8 symbols
+      } else if (level <= 8) {
+        count = 10 + Math.floor((level - 6) * 2) // 10-14 symbols
+      } else {
+        count = 15 + Math.floor((level - 8) * 3) // 15-21 symbols (max for mobile)
+      }
+    } else {
+      // Desktop: full symbol count
+      if (level <= 3) {
+        count = Math.floor(level * 1.5) // 1-4 symbols
+      } else if (level <= 6) {
+        count = 8 + Math.floor((level - 3) * 3) // 8-17 symbols
+      } else if (level <= 8) {
+        count = 20 + Math.floor((level - 6) * 5) // 20-30 symbols
+      } else {
+        count = 35 + Math.floor((level - 8) * 8) // 35-51 symbols (max)
+      }
+    }
+    
+    const backgroundSymbols = []
+    
+    for (let i = 0; i < count; i++) {
+      backgroundSymbols.push({
+        symbol: symbols[Math.floor(Math.random() * symbols.length)],
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        delay: Math.random() * 5,
+        duration: 2 + Math.random() * 3
+      })
+    }
+    
+    return backgroundSymbols
+  }
+
   // Keep original text for madness mode, don't corrupt it
   const displayText = text
+  const backgroundSymbols = mode === "madness" ? generateBackgroundSymbols(Math.floor(corruptionLevel)) : []
 
   const handleTextChange = (value: string) => {
     // For irreversible mode, only allow adding text, not deleting
@@ -293,25 +353,136 @@ export default function WritePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background p-2 sm:p-4 relative overflow-hidden">
+      {/* Loading Screen */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
+          <div className="text-center space-y-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              {mode === "madness" && (
+                <div className="absolute inset-0 w-16 h-16 border-4 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white">Initializing {modeConfig.name}</h2>
+              <p className="text-gray-400 text-sm">Preparing your digital canvas...</p>
+            </div>
+            {mode === "madness" && (
+              <div className="flex justify-center space-x-1">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"
+                    style={{ animationDelay: `${i * 0.2}s` }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen glitch overlay for madness mode */}
+      {mode === "madness" && corruptionLevel > 3 && (
+        <div 
+          className="fixed inset-0 pointer-events-none z-10"
+          style={{
+            animation: `glitch ${0.5 + corruptionLevel * 0.1}s infinite`,
+            opacity: Math.min(corruptionLevel * 0.05, 0.2)
+          }}
+        >
+          <div className="absolute inset-0 bg-black mix-blend-multiply"></div>
+          <div className="absolute inset-0 bg-purple-900 mix-blend-multiply" style={{ animationDelay: '0.1s' }}></div>
+          <div className="absolute inset-0 bg-gray-800 mix-blend-multiply" style={{ animationDelay: '0.2s' }}></div>
+        </div>
+      )}
+
+      {/* Background corruption symbols */}
+      {mode === "madness" && backgroundSymbols.map((symbol, index) => {
+        // Check if mobile device
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+        
+        // Determine symbol color and intensity based on corruption level
+        const colors = [
+          'text-purple-400',
+          'text-blue-400', 
+          'text-cyan-400',
+          'text-green-400',
+          'text-yellow-400',
+          'text-red-400',
+          'text-pink-400'
+        ]
+        const colorClass = colors[index % colors.length]
+        const opacity = Math.min(0.3 + (corruptionLevel * 0.1), 0.9)
+        const glowIntensity = Math.min(corruptionLevel * 0.3, 2)
+        
+        // Mobile-friendly sizing
+        const baseFontSize = isMobile ? 0.8 : 1
+        const fontSize = `${baseFontSize + (corruptionLevel * 0.08)}rem`
+        const glowSize = isMobile ? glowIntensity * 3 : glowIntensity * 5
+        
+        return (
+          <div
+            key={index}
+            className={`fixed pointer-events-none z-5 ${colorClass}`}
+            style={{
+              left: `${symbol.x}%`,
+              top: `${symbol.y}%`,
+              animation: `float ${symbol.duration}s ease-in-out infinite`,
+              animationDelay: `${symbol.delay}s`,
+              fontSize: fontSize,
+              filter: 'blur(0.3px)',
+              opacity: opacity,
+              textShadow: `0 0 ${glowSize}px currentColor, 0 0 ${glowSize * 2}px currentColor`
+            }}
+          >
+            {symbol.symbol}
+          </div>
+        )
+      })}
+
+      {/* Screen flicker effect for high corruption levels */}
+      {mode === "madness" && corruptionLevel > 7 && (
+        <div 
+          className="fixed inset-0 pointer-events-none z-20 bg-black"
+          style={{
+            animation: `flicker ${0.1 + corruptionLevel * 0.05}s infinite`,
+            opacity: 0.05
+          }}
+        />
+      )}
+
+      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 relative z-30">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
           <Link href="/write">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Modes
+            <Button variant="ghost" size="sm" className="text-sm">
+              <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              Back
             </Button>
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">{modeConfig.name}</h1>
-            <p className="text-muted-foreground">{modeConfig.description}</p>
+            <h1 
+              className="text-xl sm:text-2xl font-bold"
+              style={mode === "madness" ? getCorruptionEffects(Math.floor(corruptionLevel)) : {}}
+            >
+              {modeConfig.name}
+            </h1>
+            <p 
+              className="text-sm sm:text-base text-muted-foreground"
+              style={mode === "madness" && corruptionLevel > 2 ? getCorruptionEffects(Math.floor(corruptionLevel)) : {}}
+            >
+              {modeConfig.description}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setSoundEnabled(!soundEnabled)}
+              style={mode === "madness" && corruptionLevel > 4 ? getCorruptionEffects(Math.floor(corruptionLevel)) : {}}
+              className="text-xs sm:text-sm"
             >
               {soundEnabled ? "🔊" : "🔇"} Sound
             </Button>
@@ -319,8 +490,14 @@ export default function WritePage() {
         </div>
 
         {/* Writing Area */}
-        <Card className="p-6">
-          <div className="space-y-4">
+        <Card 
+          className="p-4 sm:p-6"
+          style={mode === "madness" && corruptionLevel > 1 ? {
+            ...getCorruptionEffects(Math.floor(corruptionLevel)),
+            borderColor: `rgba(75, 85, 99, ${corruptionLevel * 0.15})`
+          } : {}}
+        >
+          <div className="space-y-3 sm:space-y-4">
             {/* Title Input */}
             <div>
               <label htmlFor="title" className="block text-sm font-medium mb-2">
@@ -332,7 +509,7 @@ export default function WritePage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Give your entry a title..."
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
+                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm sm:text-base"
               />
             </div>
 
@@ -361,7 +538,7 @@ export default function WritePage() {
                   onChange={(e) => handleTextChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Start writing your thoughts..."
-                  className="min-h-[300px] resize-none"
+                  className="min-h-[200px] sm:min-h-[300px] resize-none text-sm sm:text-base"
                   style={{
                     fontFamily: mode === "madness" ? "monospace" : "inherit",
                     ...(mode === "madness" ? getCorruptionEffects(Math.floor(corruptionLevel)) : {})
@@ -388,24 +565,63 @@ export default function WritePage() {
               <Button 
                 onClick={saveEntry} 
                 disabled={isSaving || !text.trim() || !user}
-                className="flex-1"
+                className="flex-1 relative"
               >
-                {isSaving ? "Saving..." : "Save Entry"}
+                {isSaving ? (
+                  <div className="flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    <span>Saving...</span>
+                  </div>
+                ) : (
+                  "Save Entry"
+                )}
               </Button>
-              <Button variant="outline" onClick={clearAll}>
-                Clear All
-              </Button>
+              {mode !== "irreversible" && (
+                <Button variant="outline" onClick={clearAll} disabled={isSaving}>
+                  Clear All
+                </Button>
+              )}
             </div>
 
             {/* Save Status */}
+            {saveStatus === "saving" && (
+              <div className="flex items-center space-x-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-blue-400 text-sm">Saving your entry to the digital void...</span>
+              </div>
+            )}
+            
             {saveStatus === "success" && (
-              <div className="text-green-600 text-sm">✅ Entry saved successfully!</div>
+              <div className="flex items-center space-x-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg animate-pulse">
+                <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                  <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className="text-green-400 text-sm font-medium">Entry saved successfully!</span>
+              </div>
             )}
+            
             {saveStatus === "error" && (
-              <div className="text-red-600 text-sm">❌ Error saving entry. Please try again.</div>
+              <div className="flex items-center space-x-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                  <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className="text-red-400 text-sm font-medium">Error saving entry. Please try again.</span>
+              </div>
             )}
+            
             {!user && (
-              <div className="text-yellow-600 text-sm">⚠️ Please sign in to save entries.</div>
+              <div className="flex items-center space-x-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                <div className="w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center">
+                  <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className="text-yellow-400 text-sm font-medium">Please sign in to save entries.</span>
+              </div>
             )}
           </div>
         </Card>

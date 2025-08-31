@@ -28,7 +28,8 @@ export default function ReadPage() {
       try {
         setLoading(true)
         setError(null)
-        const userEntries = await getUserDiaryEntries(user.uid)
+        // Use optimized function with limit for better performance
+        const userEntries = await getUserDiaryEntries(user.uid, 50)
         setEntries(userEntries)
       } catch (err) {
         console.error('Error fetching entries:', err)
@@ -118,23 +119,23 @@ export default function ReadPage() {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
-              </Button>
-            </Link>
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold">Read Diary</h1>
-              <p className="text-muted-foreground">Loading your entries...</p>
+          <div className="text-center space-y-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className="absolute inset-0 w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
             </div>
-          </div>
-          
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading your thoughts...</p>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-white">Loading Your Memories</h2>
+              <p className="text-gray-400">Retrieving entries from the digital void...</p>
+            </div>
+            <div className="flex justify-center space-x-1">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"
+                  style={{ animationDelay: `${i * 0.1}s` }}
+                />
+              ))}
             </div>
           </div>
         </div>
