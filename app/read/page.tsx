@@ -1,85 +1,52 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ArrowLeft, Clock, Eye } from "lucide-react"
-
-// Sample diary entries
-const sampleEntries = [
-  {
-    id: 1,
-    mode: "madness",
-    modeName: "Madness Journal",
-    modeIcon: "🌀",
-    title: "The First Entry",
-    preview: "Today I began this journey into the depths of my consciousness. The words seem to flow naturally, yet there's something unsettling about the way they appear on the screen...",
-    fullText: "Today I began this journey into the depths of my consciousness. The words seem to flow naturally, yet there's something unsettling about the way they appear on the screen. Each keystroke feels like a step deeper into an unknown realm. The corruption level is still low, but I can sense it building with every word I type. What will happen when it reaches its peak? Will I still be able to read my own thoughts, or will they become as incomprehensible as the symbols that occasionally flicker across my vision?",
-    timestamp: "2024-01-15T10:30:00Z",
-    corruptionLevel: 3
-  },
-  {
-    id: 2,
-    mode: "timelocked",
-    modeName: "Time-Locked Mode",
-    modeIcon: "⏰",
-    title: "Future Self",
-    preview: "This entry is locked until tomorrow. I'm writing this knowing that my future self will read it with fresh eyes...",
-    fullText: "This entry is locked until tomorrow. I'm writing this knowing that my future self will read it with fresh eyes. The concept of time-locked entries fascinates me - it's like sending a message to yourself across time. What will I think when I read this tomorrow? Will I remember the emotions I'm feeling right now, or will they seem distant and foreign? The anticipation of reading this later adds a layer of mystery to the writing process.",
-    timestamp: "2024-01-14T15:45:00Z",
-    unlockTime: "2024-01-15T15:45:00Z"
-  },
-  {
-    id: 3,
-    mode: "echo",
-    modeName: "Echo Mode",
-    modeIcon: "🔊",
-    title: "Echoes of Thought",
-    preview: "Every word I write echoes back to me with slight variations. It's like having a conversation with myself...",
-    fullText: "Every word I write echoes back to me with slight variations. It's like having a conversation with myself, but the echo always adds something new, something unexpected. Sometimes the variations are subtle - a different word choice, a slightly altered phrase. Other times, the echo reveals thoughts I didn't know I had. It's both comforting and disconcerting to see my thoughts reflected back with these gentle distortions.",
-    timestamp: "2024-01-13T20:15:00Z"
-  },
-  {
-    id: 4,
-    mode: "shadow",
-    modeName: "Shadow Journaling Mode",
-    modeIcon: "👤",
-    title: "Hidden Layers",
-    preview: "There are layers to this entry that aren't immediately visible. Some thoughts are hidden in the shadows...",
-    fullText: "There are layers to this entry that aren't immediately visible. Some thoughts are hidden in the shadows, waiting to be revealed under the right conditions. I can feel them there, just beneath the surface of the visible text. Sometimes, when I focus just right, I can catch glimpses of these hidden layers. They contain thoughts too raw, too honest, too dangerous to be seen in the light. But they're there, and they're real.",
-    timestamp: "2024-01-11T14:30:00Z",
-    hiddenLayers: 3
-  },
-  {
-    id: 5,
-    mode: "irreversible",
-    modeName: "Irreversible Mode",
-    modeIcon: "🔒",
-    title: "Permanent Thoughts",
-    preview: "This entry is permanent. Once written, it cannot be changed or deleted. The weight of that permanence...",
-    fullText: "This entry is permanent. Once written, it cannot be changed or deleted. The weight of that permanence makes every word feel significant, every thought precious. I find myself thinking more carefully about what I write, knowing that these words will exist forever in their current form. It's both liberating and terrifying - liberating because I can't second-guess myself, terrifying because there's no going back. These are my thoughts, frozen in time.",
-    timestamp: "2024-01-10T11:00:00Z"
-  },
-  {
-    id: 6,
-    mode: "alternative",
-    modeName: "Alternative Reality Mode",
-    modeIcon: "🌌",
-    title: "Parallel Thoughts",
-    preview: "In another reality, I'm writing a different version of this entry. Here, I'm exploring the concept of parallel existence...",
-    fullText: "In another reality, I'm writing a different version of this entry. Here, I'm exploring the concept of parallel existence, wondering what my other selves might be thinking and feeling. Are they writing similar entries, or completely different ones? Do they even exist in the same way I do? The idea that there are infinite versions of myself, each making different choices and having different thoughts, is both comforting and overwhelming. We're all connected, yet separate.",
-    timestamp: "2024-01-09T16:45:00Z",
-    realityVariant: "Alpha-7"
-  }
-]
+import { ArrowLeft, Clock, Eye, Sparkles, Loader2 } from "lucide-react"
+import { useAuth } from "@/components/firebase-auth-provider"
+import { getUserDiaryEntries, DiaryEntry } from "@/lib/firebase"
 
 export default function ReadPage() {
-  const [selectedEntry, setSelectedEntry] = useState<typeof sampleEntries[0] | null>(null)
+  const { user } = useAuth()
+  const [entries, setEntries] = useState<DiaryEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedEntry, setSelectedEntry] = useState<DiaryEntry | null>(null)
+  const [showAlternatives, setShowAlternatives] = useState(false)
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  // Fetch user's diary entries
+  useEffect(() => {
+    const fetchEntries = async () => {
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        setError(null)
+        const userEntries = await getUserDiaryEntries(user.uid)
+        setEntries(userEntries)
+      } catch (err) {
+        console.error('Error fetching entries:', err)
+        setError('Failed to load diary entries')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchEntries()
+  }, [user])
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Unknown date'
+    
+    // Handle Firestore timestamp
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -88,16 +55,91 @@ export default function ReadPage() {
     })
   }
 
-  const getModeColor = (mode: string) => {
-    const colors = {
-      madness: "bg-purple-500/20 text-purple-700 border-purple-500/30",
-      timelocked: "bg-blue-500/20 text-blue-700 border-blue-500/30",
-      echo: "bg-green-500/20 text-green-700 border-green-500/30",
-      shadow: "bg-purple-500/20 text-purple-700 border-purple-500/30",
-      irreversible: "bg-red-500/20 text-red-700 border-red-500/30",
-      alternative: "bg-indigo-500/20 text-indigo-700 border-indigo-500/30"
+  const getModeConfig = (mode: string) => {
+    const configs = {
+      madness: {
+        name: "Madness Journal",
+        icon: "🌀",
+        color: "bg-purple-500/20 text-purple-700 border-purple-500/30"
+      },
+      timelocked: {
+        name: "Time-Locked Mode",
+        icon: "⏰",
+        color: "bg-blue-500/20 text-blue-700 border-blue-500/30"
+      },
+      echo: {
+        name: "Echo Mode",
+        icon: "🔊",
+        color: "bg-green-500/20 text-green-700 border-green-500/30"
+      },
+      shadow: {
+        name: "Shadow Journaling Mode",
+        icon: "👤",
+        color: "bg-purple-500/20 text-purple-700 border-purple-500/30"
+      },
+      irreversible: {
+        name: "Irreversible Mode",
+        icon: "🔒",
+        color: "bg-red-500/20 text-red-700 border-red-500/30"
+      },
+      alternative: {
+        name: "Alternative Reality Mode",
+        icon: "🌌",
+        color: "bg-indigo-500/20 text-indigo-700 border-indigo-500/30"
+      }
     }
-    return colors[mode as keyof typeof colors] || colors.madness
+    return configs[mode as keyof typeof configs] || configs.madness
+  }
+
+  const getPreview = (content: string, maxLength: number = 150) => {
+    if (content.length <= maxLength) return content
+    return content.substring(0, maxLength) + '...'
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+            <p className="text-muted-foreground mb-4">
+              Please sign in to view your diary entries.
+            </p>
+            <Link href="/auth/signin">
+              <Button>Sign In</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Home
+              </Button>
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold">Read Diary</h1>
+              <p className="text-muted-foreground">Loading your entries...</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading your thoughts...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -111,64 +153,127 @@ export default function ReadPage() {
               Back to Home
             </Button>
           </Link>
-          <div className="flex-1 text-center">
-            <h1 className="text-4xl font-bold text-foreground">Read Diary</h1>
-            <p className="text-muted-foreground">Revisit your past entries and memories</p>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold">Read Diary</h1>
+            <p className="text-muted-foreground">
+              {entries.length > 0 
+                ? `You have ${entries.length} entries in your journal`
+                : "No entries yet. Start writing to see them here."
+              }
+            </p>
           </div>
         </div>
 
+        {/* Alternative Reality Toggle */}
+        <div className="flex justify-center">
+          <Card className="p-4 border-2 border-indigo-500/30">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-500" />
+                <span className="font-semibold text-foreground">Alternative Reality Mode</span>
+              </div>
+              <Button
+                variant={showAlternatives ? "default" : "outline"}
+                onClick={() => setShowAlternatives(!showAlternatives)}
+                className="bg-indigo-500 hover:bg-indigo-600"
+              >
+                {showAlternatives ? "Show Original" : "Show Alternatives"}
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2">
+              {showAlternatives
+                ? "Reading alternate versions of your entries from parallel realities"
+                : "Switch to explore how your entries might exist in other realities"
+              }
+            </p>
+          </Card>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <Card className="p-4 border-red-500/30 bg-red-500/10">
+            <p className="text-red-600">{error}</p>
+          </Card>
+        )}
+
         {/* Entries List */}
-        <div className="space-y-4">
-          {sampleEntries.map((entry) => (
-            <Card 
-              key={entry.id} 
-              className="p-6 cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
-              onClick={() => setSelectedEntry(entry)}
-            >
-              <div className="space-y-3">
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{entry.modeIcon}</span>
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">{entry.title}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className={getModeColor(entry.mode)}>
-                          {entry.modeName}
+        {entries.length === 0 ? (
+          <Card className="p-8 text-center">
+            <div className="space-y-4">
+              <div className="text-4xl">📝</div>
+              <h2 className="text-xl font-semibold">No Entries Yet</h2>
+              <p className="text-muted-foreground">
+                Start writing your first diary entry to see it here.
+              </p>
+              <Link href="/write">
+                <Button>Start Writing</Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {entries.map((entry) => {
+              const modeConfig = getModeConfig(entry.mode)
+              return (
+                <Card
+                  key={entry.id}
+                  className="p-6 cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
+                  onClick={() => setSelectedEntry(entry)}
+                >
+                  <div className="space-y-3">
+                    {/* Header */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{modeConfig.icon}</span>
+                        <Badge className={modeConfig.color}>
+                          {modeConfig.name}
                         </Badge>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(entry.timestamp)}
-                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        {formatDate(entry.timestamp)}
                       </div>
                     </div>
+
+                    {/* Title */}
+                    <h3 className="text-lg font-semibold text-foreground">
+                      {entry.title}
+                    </h3>
+
+                    {/* Preview */}
+                    <p className="text-muted-foreground leading-relaxed">
+                      {getPreview(entry.content)}
+                    </p>
+
+                    {/* Metadata */}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      {entry.metadata && (
+                        <>
+                          <span>{entry.metadata.wordCount} words</span>
+                          <span>{entry.metadata.characterCount} characters</span>
+                        </>
+                      )}
+                      {entry.corruptionLevel && (
+                        <span>Corruption: {entry.corruptionLevel}/10</span>
+                      )}
+                      {entry.hiddenLayers && (
+                        <span>Hidden Layers: {entry.hiddenLayers}</span>
+                      )}
+                      {entry.timeLocked && (
+                        <span className="text-blue-500">⏰ Time Locked</span>
+                      )}
+                      {entry.isAlternative && entry.realityVariant && (
+                        <span className="text-indigo-500 font-medium">
+                          Reality: {entry.realityVariant}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                {/* Preview */}
-                <p className="text-muted-foreground leading-relaxed">
-                  {entry.preview}
-                </p>
-
-                {/* Additional Info */}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  {entry.corruptionLevel && (
-                    <span>Corruption: {entry.corruptionLevel}/10</span>
-                  )}
-                  {entry.hiddenLayers && (
-                    <span>Hidden Layers: {entry.hiddenLayers}</span>
-                  )}
-                  {entry.realityVariant && (
-                    <span>Reality: {entry.realityVariant}</span>
-                  )}
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
 
         {/* Entry Detail Modal */}
         {selectedEntry && (
@@ -176,23 +281,15 @@ export default function ReadPage() {
             <Card className="max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="p-6 space-y-4">
                 {/* Modal Header */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">{selectedEntry.modeIcon}</span>
-                    <div>
-                      <h2 className="text-2xl font-bold text-foreground">{selectedEntry.title}</h2>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className={getModeColor(selectedEntry.mode)}>
-                          {selectedEntry.modeName}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDate(selectedEntry.timestamp)}
-                        </span>
-                      </div>
-                    </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{getModeConfig(selectedEntry.mode).icon}</span>
+                    <Badge className={getModeConfig(selectedEntry.mode).color}>
+                      {getModeConfig(selectedEntry.mode).name}
+                    </Badge>
                   </div>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="sm"
                     onClick={() => setSelectedEntry(null)}
                   >
@@ -200,44 +297,67 @@ export default function ReadPage() {
                   </Button>
                 </div>
 
-                {/* Full Text */}
-                <div className="space-y-4">
-                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-                    {selectedEntry.fullText}
-                  </p>
+                {/* Entry Title */}
+                <h2 className="text-2xl font-bold text-foreground">
+                  {selectedEntry.title}
+                </h2>
 
-                  {/* Additional Details */}
-                  <div className="pt-4 border-t border-border">
-                    <h4 className="font-semibold text-foreground mb-2">Entry Details</h4>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Mode:</span>
-                        <span className="ml-2 text-foreground">{selectedEntry.modeName}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Date:</span>
-                        <span className="ml-2 text-foreground">{formatDate(selectedEntry.timestamp)}</span>
-                      </div>
-                      {selectedEntry.corruptionLevel && (
-                        <div>
-                          <span className="text-muted-foreground">Corruption Level:</span>
-                          <span className="ml-2 text-foreground">{selectedEntry.corruptionLevel}/10</span>
-                        </div>
-                      )}
-                      {selectedEntry.hiddenLayers && (
-                        <div>
-                          <span className="text-muted-foreground">Hidden Layers:</span>
-                          <span className="ml-2 text-foreground">{selectedEntry.hiddenLayers}</span>
-                        </div>
-                      )}
-                      {selectedEntry.realityVariant && (
-                        <div>
-                          <span className="text-muted-foreground">Reality Variant:</span>
-                          <span className="ml-2 text-foreground">{selectedEntry.realityVariant}</span>
-                        </div>
-                      )}
-                    </div>
+                {/* Entry Content */}
+                <div className="prose prose-sm max-w-none">
+                  <p className="whitespace-pre-wrap text-foreground leading-relaxed">
+                    {selectedEntry.content}
+                  </p>
+                </div>
+
+                {/* Entry Metadata */}
+                <div className="border-t pt-4 space-y-2 text-sm text-muted-foreground">
+                  <div>
+                    <span className="font-medium">Created:</span>
+                    <span className="ml-2">{formatDate(selectedEntry.timestamp)}</span>
                   </div>
+                  
+                  {selectedEntry.metadata && (
+                    <>
+                      <div>
+                        <span className="font-medium">Word Count:</span>
+                        <span className="ml-2">{selectedEntry.metadata.wordCount}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Character Count:</span>
+                        <span className="ml-2">{selectedEntry.metadata.characterCount}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedEntry.corruptionLevel && (
+                    <div>
+                      <span className="font-medium">Corruption Level:</span>
+                      <span className="ml-2">{selectedEntry.corruptionLevel}/10</span>
+                    </div>
+                  )}
+
+                  {selectedEntry.hiddenLayers && (
+                    <div>
+                      <span className="font-medium">Hidden Layers:</span>
+                      <span className="ml-2">{selectedEntry.hiddenLayers}</span>
+                    </div>
+                  )}
+
+                  {selectedEntry.timeLocked && (
+                    <div>
+                      <span className="font-medium">Status:</span>
+                      <span className="ml-2 text-blue-500">⏰ Time Locked</span>
+                    </div>
+                  )}
+
+                  {selectedEntry.isAlternative && selectedEntry.realityVariant && (
+                    <div>
+                      <span className="font-medium">Reality Variant:</span>
+                      <span className="ml-2 text-indigo-500 font-medium">
+                        {selectedEntry.realityVariant}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>

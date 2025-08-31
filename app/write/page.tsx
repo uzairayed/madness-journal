@@ -42,13 +42,6 @@ const journalModes = [
     description: "Once written, entries cannot be edited or deleted",
     icon: "🔒",
     color: "border-red-500/30 hover:border-red-500/50"
-  },
-  {
-    id: "alternative",
-    name: "Alternative Reality Mode",
-    description: "Parallel versions of your entries which exist in different realities",
-    icon: "🌌",
-    color: "border-indigo-500/30 hover:border-indigo-500/50"
   }
 ]
 

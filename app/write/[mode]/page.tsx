@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { useParams } from "next/navigation"
+import { useAuth } from "@/components/firebase-auth-provider"
+import { saveDiaryEntry, DiaryEntry } from "@/lib/firebase"
 
 const modeConfigs = {
   madness: {
@@ -45,11 +47,15 @@ export default function WritePage() {
   const params = useParams()
   const mode = params.mode as string
   const modeConfig = modeConfigs[mode as keyof typeof modeConfigs] || modeConfigs.madness
+  const { user } = useAuth()
 
   const [text, setText] = useState("")
+  const [title, setTitle] = useState("")
   const [corruptionLevel, setCorruptionLevel] = useState(0)
   const [entries, setEntries] = useState<string[]>([])
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
 
@@ -81,22 +87,20 @@ export default function WritePage() {
 
   // Play a short click sound per key press
   const playKeySound = () => {
-    if (!soundEnabled) return
-    const ctx = audioCtxRef.current
-    if (!ctx) return
+    if (!soundEnabled || !audioCtxRef.current) return
 
+    const ctx = audioCtxRef.current
     const now = ctx.currentTime
+
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
 
-    const baseFreq = 260
-    const freq = baseFreq + Math.random() * 140
-    osc.type = "square"
-    osc.frequency.setValueAtTime(freq, now)
+    osc.frequency.setValueAtTime(800 + Math.random() * 400, now)
+    osc.type = "sine"
 
-    const attack = 0.002
-    const decay = 0.05
-    gain.gain.cancelScheduledValues(now)
+    const attack = 0.01
+    const decay = 0.1
+
     gain.gain.setValueAtTime(0, now)
     gain.gain.linearRampToValueAtTime(0.12, now + attack)
     gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay)
@@ -144,14 +148,35 @@ export default function WritePage() {
   }
 
   const handleTextChange = (value: string) => {
-    setText(value)
-    if (mode === "madness" && value.length > text.length) {
-      setCorruptionLevel((prev) => Math.min(prev + 0.1, 10))
+    // For irreversible mode, only allow adding text, not deleting
+    if (mode === "irreversible") {
+      if (value.length >= text.length) {
+        setText(value)
+        if (value.length > text.length) {
+          setCorruptionLevel((prev) => Math.min(prev + 0.1, 10))
+        }
+      }
+      // Don't update if trying to delete
+    } else {
+      setText(value)
+      if (mode === "madness" && value.length > text.length) {
+        setCorruptionLevel((prev) => Math.min(prev + 0.1, 10))
+      }
     }
   }
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     const isModifier = e.ctrlKey || e.metaKey || e.altKey
+    
+    // For irreversible mode, block deletion keys
+    if (mode === "irreversible") {
+      const deletionKeys = ["Backspace", "Delete"]
+      if (deletionKeys.includes(e.key)) {
+        e.preventDefault()
+        return
+      }
+    }
+    
     if (isModifier) return
 
     const allowed = ["Backspace", "Enter", "Tab", "Spacebar", " "]
@@ -160,33 +185,88 @@ export default function WritePage() {
     }
   }
 
-  const saveEntry = () => {
-    if (text.trim()) {
-      // For now, just log to console
-      console.log("Entry saved:", {
-        mode: mode,
-        text: text,
-        timestamp: new Date().toISOString(),
-        corruptionLevel: mode === "madness" ? corruptionLevel : null
-      })
+  const saveEntry = async () => {
+    if (!user) {
+      setSaveStatus("error")
+      return
+    }
 
-      // In a real app, this would save to backend
+    if (!text.trim()) {
+      setSaveStatus("error")
+      return
+    }
+
+    setIsSaving(true)
+    setSaveStatus("saving")
+
+    try {
+      // Generate title if not provided
+      const entryTitle = title.trim() || `Entry ${new Date().toLocaleDateString()}`
+
+      // Prepare entry data
+      const entryData: Omit<DiaryEntry, 'id' | 'timestamp'> = {
+        userId: user.uid,
+        mode: mode,
+        title: entryTitle,
+        content: text,
+        metadata: {
+          wordCount: text.split(/\s+/).filter(word => word.length > 0).length,
+          characterCount: text.length,
+        }
+      }
+
+      // Add mode-specific data
+      if (mode === "madness") {
+        entryData.corruptionLevel = Math.floor(corruptionLevel)
+      }
+
+      if (mode === "shadow") {
+        entryData.hiddenLayers = Math.floor(Math.random() * 5) + 1
+      }
+
+      if (mode === "timelocked") {
+        entryData.timeLocked = true
+        entryData.unlockTime = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+      }
+
+      // Save to Firestore
+      const savedEntry = await saveDiaryEntry(entryData)
+      
+      // Update local state
       setEntries((prev) => [text, ...prev])
       setText("")
+      setTitle("")
+      
       if (mode === "madness") {
         setCorruptionLevel((prev) => Math.min(prev + 1, 10))
       }
+      
+      setSaveStatus("success")
+      
+      // Reset success status after 3 seconds
+      setTimeout(() => setSaveStatus("idle"), 3000)
+      
+    } catch (error) {
+      console.error("Error saving entry:", error)
+      setSaveStatus("error")
+      
+      // Reset error status after 5 seconds
+      setTimeout(() => setSaveStatus("idle"), 5000)
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const clearAll = () => {
     setEntries([])
     setText("")
+    setTitle("")
     if (mode === "madness") {
       setCorruptionLevel(0)
     }
   }
 
+  // Calculate display text for madness mode
   const displayText = mode === "madness" ? corruptText(text, Math.floor(corruptionLevel)) : text
 
   return (
@@ -200,102 +280,112 @@ export default function WritePage() {
               Back to Modes
             </Button>
           </Link>
-          <div className="flex-1 text-center">
-            <div className="flex items-center justify-center gap-3 mb-2">
-              <span className="text-3xl">{modeConfig.icon}</span>
-              <h1 className="text-3xl font-bold text-foreground">{modeConfig.name}</h1>
-            </div>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold">{modeConfig.name}</h1>
             <p className="text-muted-foreground">{modeConfig.description}</p>
-            {mode === "madness" && (
-              <p className="text-sm text-muted-foreground mt-1">
-                Corruption Level: {Math.floor(corruptionLevel)}/10
-              </p>
-            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+            >
+              {soundEnabled ? "🔊" : "🔇"} Sound
+            </Button>
           </div>
         </div>
 
         {/* Writing Area */}
-        <Card className={`p-6 ${mode === "madness" && corruptionLevel > 5 ? "border-accent" : "border-border"}`}>
+        <Card className="p-6">
           <div className="space-y-4">
-            <div className="relative">
-              <Textarea
-                ref={textareaRef}
-                value={text}
-                onChange={(e) => handleTextChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={`Begin writing in ${modeConfig.name.toLowerCase()}...`}
-                className={`min-h-[300px] resize-none bg-input text-foreground ${
-                  mode === "madness" && corruptionLevel > 4 ? "font-mono" : ""
-                }`}
-                style={{
-                  filter:
-                    mode === "madness" && corruptionLevel > 7
-                      ? `hue-rotate(${corruptionLevel * 10}deg) saturate(${1 + corruptionLevel * 0.1})`
-                      : "none",
-                }}
+            {/* Title Input */}
+            <div>
+              <label htmlFor="title" className="block text-sm font-medium mb-2">
+                Title (optional)
+              </label>
+              <input
+                id="title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Give your entry a title..."
+                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
               />
-              {/* Overlay corrupted text for madness mode */}
-              {mode === "madness" && corruptionLevel > 2 && (
-                <div
-                  className="absolute inset-0 p-3 pointer-events-none text-foreground/30 whitespace-pre-wrap font-mono"
-                  style={{
-                    fontSize: textareaRef.current?.style.fontSize || "14px",
-                    lineHeight: textareaRef.current?.style.lineHeight || "1.5",
-                  }}
-                >
-                  {displayText}
-                </div>
-              )}
             </div>
 
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={saveEntry}
-                className={mode === "madness" && corruptionLevel > 6 ? "glitch" : ""}
-                variant={mode === "madness" && corruptionLevel > 8 ? "destructive" : "default"}
+            {/* Text Area */}
+            <div>
+              <label htmlFor="content" className="block text-sm font-medium mb-2">
+                Your Entry
+              </label>
+              <Textarea
+                ref={textareaRef}
+                id="content"
+                value={displayText} // Use displayText instead of text for madness mode
+                onChange={(e) => handleTextChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Start writing your thoughts..."
+                className="min-h-[300px] resize-none"
+                style={{
+                  fontFamily: mode === "madness" ? "monospace" : "inherit",
+                }}
+              />
+            </div>
+
+            {/* Mode-specific info */}
+            {mode === "madness" && (
+              <div className="text-sm text-muted-foreground">
+                Corruption Level: {Math.floor(corruptionLevel)}/10
+              </div>
+            )}
+            
+            {mode === "irreversible" && (
+              <div className="text-sm text-red-600 font-medium">
+                ⚠️ Irreversible Mode: Backspace and Delete are disabled. Every keystroke is permanent.
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <Button 
+                onClick={saveEntry} 
+                disabled={isSaving || !text.trim() || !user}
+                className="flex-1"
               >
-                Save Entry
+                {isSaving ? "Saving..." : "Save Entry"}
               </Button>
-              <Button onClick={clearAll} variant="outline">
+              <Button variant="outline" onClick={clearAll}>
                 Clear All
               </Button>
-              <Button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                variant="outline"
-              >
-                {soundEnabled ? "🔊 Sound On" : "🔇 Sound Off"}
-              </Button>
             </div>
+
+            {/* Save Status */}
+            {saveStatus === "success" && (
+              <div className="text-green-600 text-sm">✅ Entry saved successfully!</div>
+            )}
+            {saveStatus === "error" && (
+              <div className="text-red-600 text-sm">❌ Error saving entry. Please try again.</div>
+            )}
+            {!user && (
+              <div className="text-yellow-600 text-sm">⚠️ Please sign in to save entries.</div>
+            )}
           </div>
         </Card>
 
         {/* Previous Entries */}
         {entries.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-semibold text-foreground">Recent Entries</h2>
-            <div className="space-y-3">
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold mb-4">Recent Entries</h2>
+            <div className="space-y-2">
               {entries.map((entry, index) => (
-                <Card key={index} className="p-4">
-                  <p className="text-card-foreground whitespace-pre-wrap">
-                    {mode === "madness" 
-                      ? corruptText(entry, Math.floor(corruptionLevel * (0.3 + index * 0.1)))
-                      : entry
-                    }
+                <div key={index} className="p-3 border rounded">
+                  <p className="text-sm text-muted-foreground">
+                    {entry.substring(0, 100)}...
                   </p>
-                </Card>
+                </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Madness Indicator for madness mode */}
-        {mode === "madness" && corruptionLevel > 8 && (
-          <div className="fixed inset-0 pointer-events-none">
-            <div className="absolute top-0 left-0 w-full h-full bg-accent/5 animate-pulse" />
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-6xl text-accent/20 corrupt">
-              ◆◇◈◉◎●○◦
-            </div>
-          </div>
+          </Card>
         )}
       </div>
     </div>
