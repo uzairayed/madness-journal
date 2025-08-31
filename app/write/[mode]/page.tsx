@@ -124,69 +124,54 @@ export default function WritePage() {
       "ǝ", "ɹ", "ʇ", "ʎ", "ɐ", "ɯ", "ɔ", "ɟ", "ɓ", "ɗ",
       "ɠ", "ɦ", "ɨ", "ɪ", "ɫ", "ɬ", "ɭ", "ɮ", "ɯ", "ɰ",
     ]
-    
-    // Character substitution map for subtle corruption
-    const charSubstitutions: { [key: string]: string[] } = {
-      'a': ['@', '4', 'α', 'а'],
-      'e': ['3', 'ε', 'е', 'ё'],
-      'i': ['1', '!', 'ι', 'і'],
-      'o': ['0', 'ο', 'о', 'θ'],
-      's': ['5', '$', 'ѕ', 'σ'],
-      't': ['7', 'τ', 'т'],
-      'n': ['η', 'п', 'и'],
-      'r': ['я', 'г'],
-      'l': ['1', '|', 'ι'],
-      'b': ['в', 'β'],
-      'c': ['с', '¢'],
-      'd': ['д', 'δ'],
-      'f': ['ƒ', 'ф'],
-      'g': ['9', 'ɡ'],
-      'h': ['н', 'н'],
-      'j': ['ј'],
-      'k': ['к'],
-      'm': ['м'],
-      'p': ['р', 'ρ'],
-      'q': ['q'],
-      'u': ['υ', 'у'],
-      'v': ['ν', 'ν'],
-      'w': ['ш', 'ω'],
-      'x': ['х', 'χ'],
-      'y': ['у', 'γ'],
-      'z': ['z', 'ζ']
-    }
 
     let corrupted = originalText
-    const corruptionRate = Math.min(level * 0.03, 0.15) // Reduced rate for subtlety
     const symbolRate = Math.min(level * 0.02, 0.1) // Rate for random symbols
 
+    // Add random symbols in the background without replacing actual text
     for (let i = 0; i < corrupted.length; i++) {
-      const char = corrupted[i].toLowerCase()
-      
-      // Add random symbols occasionally
       if (Math.random() < symbolRate) {
         const symbol = Math.random() < 0.5 
           ? corruptChars[Math.floor(Math.random() * corruptChars.length)]
           : glitchChars[Math.floor(Math.random() * glitchChars.length)]
         corrupted = corrupted.substring(0, i) + symbol + corrupted.substring(i + 1)
-        continue
-      }
-      
-      // Corrupt actual characters
-      if (Math.random() < corruptionRate && charSubstitutions[char]) {
-        const substitutions = charSubstitutions[char]
-        const replacement = substitutions[Math.floor(Math.random() * substitutions.length)]
-        
-        // Preserve case
-        const finalReplacement = corrupted[i] === corrupted[i].toUpperCase() 
-          ? replacement.toUpperCase() 
-          : replacement
-        
-        corrupted = corrupted.substring(0, i) + finalReplacement + corrupted.substring(i + 1)
       }
     }
 
     return corrupted
   }
+
+  // Get visual corruption effects for madness mode
+  const getCorruptionEffects = (level: number) => {
+    if (level === 0) return {}
+    
+    const effects: React.CSSProperties = {}
+    
+    // Add glitch effects based on corruption level
+    if (level > 2) {
+      effects.animation = `glitch ${0.3 + level * 0.1}s infinite`
+    }
+    
+    // Add flicker effects
+    if (level > 4) {
+      effects.animation = `${effects.animation || ''}, flicker ${2 + level * 0.5}s infinite`
+    }
+    
+    // Add color shifts
+    if (level > 6) {
+      effects.filter = `hue-rotate(${level * 10}deg)`
+    }
+    
+    // Add text shadow for corruption effect
+    if (level > 1) {
+      effects.textShadow = `0 0 ${level * 2}px rgba(255, 0, 255, ${level * 0.1})`
+    }
+    
+    return effects
+  }
+
+  // Keep original text for madness mode, don't corrupt it
+  const displayText = text
 
   const handleTextChange = (value: string) => {
     // For irreversible mode, only allow adding text, not deleting
@@ -307,9 +292,6 @@ export default function WritePage() {
     }
   }
 
-  // Calculate display text for madness mode
-  const displayText = mode === "madness" ? corruptText(text, Math.floor(corruptionLevel)) : text
-
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -359,18 +341,33 @@ export default function WritePage() {
               <label htmlFor="content" className="block text-sm font-medium mb-2">
                 Your Entry
               </label>
-              <Textarea
-                ref={textareaRef}
-                id="content"
-                value={displayText} // Use displayText instead of text for madness mode
-                onChange={(e) => handleTextChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Start writing your thoughts..."
-                className="min-h-[300px] resize-none"
+              <div 
+                className={`relative ${mode === "madness" && corruptionLevel > 3 ? "animate-pulse" : ""}`}
                 style={{
-                  fontFamily: mode === "madness" ? "monospace" : "inherit",
+                  ...(mode === "madness" && corruptionLevel > 5 ? {
+                    background: `linear-gradient(45deg, 
+                      rgba(255, 0, 255, ${corruptionLevel * 0.02}), 
+                      rgba(0, 255, 255, ${corruptionLevel * 0.02})
+                    )`,
+                    borderRadius: '0.5rem',
+                    padding: '2px'
+                  } : {})
                 }}
-              />
+              >
+                <Textarea
+                  ref={textareaRef}
+                  id="content"
+                  value={displayText}
+                  onChange={(e) => handleTextChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Start writing your thoughts..."
+                  className="min-h-[300px] resize-none"
+                  style={{
+                    fontFamily: mode === "madness" ? "monospace" : "inherit",
+                    ...(mode === "madness" ? getCorruptionEffects(Math.floor(corruptionLevel)) : {})
+                  }}
+                />
+              </div>
             </div>
 
             {/* Mode-specific info */}
