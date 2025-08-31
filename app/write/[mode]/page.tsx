@@ -124,23 +124,64 @@ export default function WritePage() {
       "ǝ", "ɹ", "ʇ", "ʎ", "ɐ", "ɯ", "ɔ", "ɟ", "ɓ", "ɗ",
       "ɠ", "ɦ", "ɨ", "ɪ", "ɫ", "ɬ", "ɭ", "ɮ", "ɯ", "ɰ",
     ]
+    
+    // Character substitution map for subtle corruption
+    const charSubstitutions: { [key: string]: string[] } = {
+      'a': ['@', '4', 'α', 'а'],
+      'e': ['3', 'ε', 'е', 'ё'],
+      'i': ['1', '!', 'ι', 'і'],
+      'o': ['0', 'ο', 'о', 'θ'],
+      's': ['5', '$', 'ѕ', 'σ'],
+      't': ['7', 'τ', 'т'],
+      'n': ['η', 'п', 'и'],
+      'r': ['я', 'г'],
+      'l': ['1', '|', 'ι'],
+      'b': ['в', 'β'],
+      'c': ['с', '¢'],
+      'd': ['д', 'δ'],
+      'f': ['ƒ', 'ф'],
+      'g': ['9', 'ɡ'],
+      'h': ['н', 'н'],
+      'j': ['ј'],
+      'k': ['к'],
+      'm': ['м'],
+      'p': ['р', 'ρ'],
+      'q': ['q'],
+      'u': ['υ', 'у'],
+      'v': ['ν', 'ν'],
+      'w': ['ш', 'ω'],
+      'x': ['х', 'χ'],
+      'y': ['у', 'γ'],
+      'z': ['z', 'ζ']
+    }
 
     let corrupted = originalText
-    const corruptionRate = level * 0.05
+    const corruptionRate = Math.min(level * 0.03, 0.15) // Reduced rate for subtlety
+    const symbolRate = Math.min(level * 0.02, 0.1) // Rate for random symbols
 
     for (let i = 0; i < corrupted.length; i++) {
-      if (Math.random() < corruptionRate) {
-        if (Math.random() < 0.5) {
-          corrupted =
-            corrupted.substring(0, i) +
-            corruptChars[Math.floor(Math.random() * corruptChars.length)] +
-            corrupted.substring(i + 1)
-        } else {
-          corrupted =
-            corrupted.substring(0, i) +
-            glitchChars[Math.floor(Math.random() * glitchChars.length)] +
-            corrupted.substring(i + 1)
-        }
+      const char = corrupted[i].toLowerCase()
+      
+      // Add random symbols occasionally
+      if (Math.random() < symbolRate) {
+        const symbol = Math.random() < 0.5 
+          ? corruptChars[Math.floor(Math.random() * corruptChars.length)]
+          : glitchChars[Math.floor(Math.random() * glitchChars.length)]
+        corrupted = corrupted.substring(0, i) + symbol + corrupted.substring(i + 1)
+        continue
+      }
+      
+      // Corrupt actual characters
+      if (Math.random() < corruptionRate && charSubstitutions[char]) {
+        const substitutions = charSubstitutions[char]
+        const replacement = substitutions[Math.floor(Math.random() * substitutions.length)]
+        
+        // Preserve case
+        const finalReplacement = corrupted[i] === corrupted[i].toUpperCase() 
+          ? replacement.toUpperCase() 
+          : replacement
+        
+        corrupted = corrupted.substring(0, i) + finalReplacement + corrupted.substring(i + 1)
       }
     }
 
@@ -153,14 +194,14 @@ export default function WritePage() {
       if (value.length >= text.length) {
         setText(value)
         if (value.length > text.length) {
-          setCorruptionLevel((prev) => Math.min(prev + 0.1, 10))
+          setCorruptionLevel((prev) => Math.min(prev + 0.05, 10))
         }
       }
       // Don't update if trying to delete
     } else {
       setText(value)
       if (mode === "madness" && value.length > text.length) {
-        setCorruptionLevel((prev) => Math.min(prev + 0.1, 10))
+        setCorruptionLevel((prev) => Math.min(prev + 0.05, 10))
       }
     }
   }
@@ -238,7 +279,7 @@ export default function WritePage() {
       setTitle("")
       
       if (mode === "madness") {
-        setCorruptionLevel((prev) => Math.min(prev + 1, 10))
+        setCorruptionLevel((prev) => Math.min(prev + 0.5, 10))
       }
       
       setSaveStatus("success")
