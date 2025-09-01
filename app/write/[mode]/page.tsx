@@ -58,6 +58,8 @@ export default function WritePage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle")
   const [isLoading, setIsLoading] = useState(true)
   const [isPublic, setIsPublic] = useState(false)
+  const [showSuccessScreen, setShowSuccessScreen] = useState(false)
+  const [savedEntryTitle, setSavedEntryTitle] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
 
@@ -240,7 +242,11 @@ export default function WritePage() {
 
     try {
       // Generate title if not provided
-      const entryTitle = title.trim() || `Entry ${new Date().toLocaleDateString()}`
+      const now = new Date()
+      const month = (now.getMonth() + 1).toString().padStart(2, '0')
+      const day = now.getDate().toString().padStart(2, '0')
+      const year = now.getFullYear()
+      const entryTitle = title.trim() || `Entry ${month}/${day}/${year}`
 
       // Prepare entry data
       const entryData: Omit<DiaryEntry, 'id' | 'timestamp'> = {
@@ -271,6 +277,30 @@ export default function WritePage() {
 
       // Save to Firestore
       const savedEntry = await saveDiaryEntry(entryData)
+      
+      // Check and unlock achievements after saving
+      try {
+        console.log('🔍 [WRITE DEBUG] Starting achievement check after saving entry')
+        const { checkAndUnlockAchievements, getUserProfile } = await import('@/lib/firebase')
+        const currentProfile = await getUserProfile(user.uid)
+        
+        if (currentProfile) {
+          console.log('🔍 [WRITE DEBUG] Current profile:', currentProfile)
+          // Get all user entries to check achievements
+          const { getUserDiaryEntries } = await import('@/lib/firebase')
+          const allEntries = await getUserDiaryEntries(user.uid, 1000) // Get all entries for achievement checking
+          
+          console.log('🔍 [WRITE DEBUG] Total entries for achievement checking:', allEntries.length)
+          console.log('🔍 [WRITE DEBUG] Entry details:', allEntries.map(e => ({ mode: e.mode, wordCount: e.metadata?.wordCount, isPublic: e.isPublic })))
+          
+          // Check and unlock achievements
+          await checkAndUnlockAchievements(user.uid, currentProfile, allEntries)
+          console.log('🔍 [WRITE DEBUG] Achievement check completed')
+        }
+      } catch (achievementError) {
+        console.warn('Failed to check achievements:', achievementError)
+        // Don't fail the save operation if achievement checking fails
+      }
       
       // Update user profile with new entry counts
       try {
@@ -304,9 +334,11 @@ export default function WritePage() {
       }
       
       setSaveStatus("success")
+      setShowSuccessScreen(true)
+      setSavedEntryTitle(entryTitle)
       
-      // Reset success status after 3 seconds
-      setTimeout(() => setSaveStatus("idle"), 3000)
+      // Don't auto-reset success status - let user see the success screen
+      // setTimeout(() => setSaveStatus("idle"), 3000)
       
     } catch (error) {
       console.error("Error saving entry:", error)
@@ -326,6 +358,69 @@ export default function WritePage() {
     if (mode === "madness") {
       setCorruptionLevel(0)
     }
+  }
+
+  // Get save status message
+  const getSaveStatusMessage = (status: "idle" | "saving" | "success" | "error") => {
+    if (status === "idle") return null
+    
+    if (status === "saving") {
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-8 rounded-lg text-center">
+            <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-lg font-medium">Saving Entry...</p>
+          </div>
+        </div>
+      )
+    }
+    
+    if (status === "success") {
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-8 rounded-lg text-center max-w-md">
+            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-green-400 mb-2">Entry Saved!</h2>
+            <p className="text-lg text-muted-foreground mb-6">"{savedEntryTitle}"</p>
+            <Button 
+              onClick={() => window.location.href = '/'} 
+              className="bg-primary hover:bg-primary/90 text-white px-6 py-3"
+            >
+              Go to Home
+            </Button>
+          </div>
+        </div>
+      )
+    }
+    
+    if (status === "error") {
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-8 rounded-lg text-center">
+            <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-red-400 mb-2">Save Failed</h2>
+            <p className="text-muted-foreground mb-4">There was an error saving your entry. Please try again.</p>
+            <Button 
+              onClick={() => setSaveStatus("idle")} 
+              variant="outline"
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )
+    }
+    
+    return null
   }
 
   // Get mode-specific styling
@@ -483,58 +578,6 @@ export default function WritePage() {
           <span className="text-sm font-medium">{panel.title}</span>
         </div>
         <p className={`text-xs ${panel.textColor.replace('400', '300')} mt-1`}>{panel.description}</p>
-      </div>
-    )
-  }
-
-  // Get save status message
-  const getSaveStatusMessage = (status: string) => {
-    const statusMessages = {
-      saving: {
-        bgColor: "bg-blue-500/10",
-        borderColor: "border-blue-500/20",
-        textColor: "text-blue-400",
-        icon: (
-          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-        ),
-        message: "Saving your entry to the digital void..."
-      },
-      success: {
-        bgColor: "bg-green-500/10",
-        borderColor: "border-green-500/20",
-        textColor: "text-green-400",
-        icon: (
-          <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-          </div>
-        ),
-        message: "Entry saved successfully!",
-        animation: "animate-pulse"
-      },
-      error: {
-        bgColor: "bg-red-500/10",
-        borderColor: "border-red-500/20",
-        textColor: "text-red-400",
-        icon: (
-          <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </div>
-        ),
-        message: "Error saving entry. Please try again."
-      }
-    }
-
-    const config = statusMessages[status as keyof typeof statusMessages]
-    if (!config) return null
-
-    return (
-      <div className={`flex items-center space-x-2 p-3 ${config.bgColor} border ${config.borderColor} rounded-lg ${(config as any).animation || ''}`}>
-        {config.icon}
-        <span className={`${config.textColor} text-sm font-medium`}>{config.message}</span>
       </div>
     )
   }

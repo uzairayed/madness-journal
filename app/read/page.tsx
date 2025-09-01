@@ -264,11 +264,6 @@ export default function ReadPage() {
                       {entry.timeLocked && (
                         <span className="text-blue-500">⏰ Time Locked</span>
                       )}
-                      {entry.isAlternative && entry.realityVariant && (
-                        <span className="text-indigo-500 font-medium">
-                          Reality: {entry.realityVariant}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </Card>
@@ -349,15 +344,6 @@ export default function ReadPage() {
                     <div>
                       <span className="font-medium">Status:</span>
                       <span className="ml-2 text-blue-500">⏰ Time Locked</span>
-                    </div>
-                  )}
-
-                  {selectedEntry.isAlternative && selectedEntry.realityVariant && (
-                    <div>
-                      <span className="font-medium">Reality Variant:</span>
-                      <span className="ml-2 text-indigo-500 font-medium">
-                        {selectedEntry.realityVariant}
-                      </span>
                     </div>
                   )}
                 </div>

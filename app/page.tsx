@@ -171,9 +171,23 @@ export default function HomePage() {
       const unlockedAchievementIds = userAchievements.map(ua => ua.achievementId)
       
       // Check and unlock new achievements
-      await checkAndUnlockAchievements(user.uid, userProfile, diaryEntries)
+      if (diaryEntries.length > 0) {
+        await checkAndUnlockAchievements(user.uid, userProfile, diaryEntries)
+        
+        // Refresh achievements after checking
+        const refreshedAchievements = await getUserAchievements(user.uid)
+        const refreshedUnlockedIds = refreshedAchievements.map(ua => ua.achievementId)
+        
+        // Update achievements based on backend data
+        const updatedAchievements = achievements.map(achievement => {
+          const unlocked = refreshedUnlockedIds.includes(achievement.id)
+          return { ...achievement, unlocked }
+        })
+        
+        return updatedAchievements
+      }
       
-      // Update achievements based on backend data
+      // If no entries, just return current unlock status
       const updatedAchievements = achievements.map(achievement => {
         const unlocked = unlockedAchievementIds.includes(achievement.id)
         return { ...achievement, unlocked }
@@ -275,11 +289,51 @@ export default function HomePage() {
 
   // Get achievements with current unlock status
   const [currentAchievements, setCurrentAchievements] = useState(achievements)
+  const [achievementNotifications, setAchievementNotifications] = useState<Array<{id: number, achievement: any, timestamp: number}>>([])
 
   // Update achievements when user data changes
   useEffect(() => {
     if (user && userProfile) {
-      updateAchievements().then(setCurrentAchievements)
+      console.log('🔍 [ACHIEVEMENT DEBUG] Starting achievement update for user:', user.uid)
+      console.log('🔍 [ACHIEVEMENT DEBUG] User profile:', userProfile)
+      console.log('🔍 [ACHIEVEMENT DEBUG] Diary entries count:', diaryEntries.length)
+      
+      updateAchievements().then(updatedAchievements => {
+        console.log('🔍 [ACHIEVEMENT DEBUG] Updated achievements:', updatedAchievements.filter(a => a.unlocked))
+        
+        // Check for newly unlocked achievements
+        const previouslyUnlocked = currentAchievements.filter(a => a.unlocked).map(a => a.id)
+        const newlyUnlocked = updatedAchievements.filter(a => a.unlocked && !previouslyUnlocked.includes(a.id))
+        
+        console.log('🔍 [ACHIEVEMENT DEBUG] Previously unlocked:', previouslyUnlocked)
+        console.log('🔍 [ACHIEVEMENT DEBUG] Newly unlocked:', newlyUnlocked)
+        
+        // Show notifications for newly unlocked achievements
+        newlyUnlocked.forEach(achievement => {
+          console.log('🎉 [ACHIEVEMENT UNLOCKED]', achievement.name)
+          const notification = {
+            id: Date.now() + Math.random(),
+            achievement,
+            timestamp: Date.now()
+          }
+          setAchievementNotifications(prev => [...prev, notification])
+          
+          // Auto-remove notification after 5 seconds
+          setTimeout(() => {
+            setAchievementNotifications(prev => prev.filter(n => n.id !== notification.id))
+          }, 5000)
+        })
+        
+        setCurrentAchievements(updatedAchievements)
+      })
+      
+      // Also check achievements directly from backend to ensure sync
+      if (diaryEntries.length > 0) {
+        console.log('🔍 [ACHIEVEMENT DEBUG] Checking achievements from backend...')
+        import('@/lib/firebase').then(({ checkAndUnlockAchievements }) => {
+          checkAndUnlockAchievements(user.uid, userProfile, diaryEntries)
+        }).catch(console.error)
+      }
     }
   }, [user, userProfile, diaryEntries])
 
@@ -826,6 +880,42 @@ export default function HomePage() {
       {/* Footer */}
       <div className="text-center text-sm text-gray-500 mt-12">
         <p>"Choose your path wisely, for the mind is a labyrinth of infinite possibilities."</p>
+      </div>
+
+      {/* Achievement Notifications */}
+      <div className="fixed bottom-4 right-4 z-50 space-y-3">
+        {achievementNotifications.map((notification) => (
+          <div
+            key={notification.id}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 rounded-lg shadow-2xl border border-purple-400/50 max-w-sm animate-slide-in-right"
+            style={{
+              animation: 'slideInRight 0.5s ease-out'
+            }}
+          >
+            <div className="flex items-start space-x-3">
+              <div className="text-3xl animate-bounce">
+                {notification.achievement.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-sm mb-1">
+                  🎉 Achievement Unlocked!
+                </h4>
+                <h5 className="font-semibold text-xs mb-1">
+                  {notification.achievement.name}
+                </h5>
+                <p className="text-xs opacity-90">
+                  {notification.achievement.description}
+                </p>
+              </div>
+              <button
+                onClick={() => setAchievementNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                className="text-white/70 hover:text-white transition-colors duration-200"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

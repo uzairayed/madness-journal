@@ -44,6 +44,9 @@ export interface DiaryEntry {
   }
   corruptionLevel?: number
   isPublic: boolean
+  hiddenLayers?: number
+  timeLocked?: boolean
+  unlockTime?: any
 }
 
 export interface UserProfile {
@@ -61,7 +64,7 @@ export interface UserProfile {
 
 export interface UserAchievement {
   achievementId: number
-  unlockedAt: any
+  unlockedAt: string | undefined  // ISO timestamp string
   progress?: number
   maxProgress?: number
 }
@@ -437,27 +440,50 @@ export const resetUserProfile = async (userId: string) => {
 // Achievement-related functions
 export const unlockAchievement = async (userId: string, achievementId: number): Promise<void> => {
   try {
-    const userRef = doc(db, 'user_profiles', userId)
+    // First, get the user profile to find the correct document ID
+    const userProfile = await getUserProfile(userId)
+    if (!userProfile || !userProfile.id) {
+      console.error(`🏆 Cannot unlock achievement: User profile not found for ${userId}`)
+      return
+    }
     
-    // Get current achievements or initialize empty array
+    const userRef = doc(db, 'user_profiles', userProfile.id)
+    
+    // Get current achievements
     const userDoc = await getDoc(userRef)
     const currentAchievements = userDoc.data()?.achievements || []
     
     // Check if achievement is already unlocked
-    const alreadyUnlocked = currentAchievements.some((a: UserAchievement) => a.achievementId === achievementId)
+    const existingAchievement = currentAchievements.find((a: UserAchievement) => a.achievementId === achievementId)
+    if (existingAchievement?.unlockedAt) {
+      console.log(`🏆 Achievement ${achievementId} already unlocked`)
+      return
+    }
     
-    if (!alreadyUnlocked) {
+    // Create a proper timestamp that Firestore can handle
+    const unlockTimestamp = new Date().toISOString()
+    
+    // Add new achievement or update existing one
+    if (existingAchievement) {
+      // Update existing achievement
+      existingAchievement.unlockedAt = unlockTimestamp
+      existingAchievement.progress = existingAchievement.maxProgress
+    } else {
+      // Add new achievement
       const newAchievement: UserAchievement = {
         achievementId,
-        unlockedAt: serverTimestamp(),
+        unlockedAt: unlockTimestamp,
         progress: 1,
         maxProgress: 1
       }
-      
-      await updateDoc(userRef, {
-        achievements: [...currentAchievements, newAchievement]
-      })
+      currentAchievements.push(newAchievement)
     }
+    
+    await updateDoc(userRef, {
+      achievements: currentAchievements
+    })
+    
+    console.log(`🏆 Achievement ${achievementId} unlocked successfully at ${unlockTimestamp}`)
   } catch (error) {
     console.error('Error unlocking achievement:', error)
     throw error
@@ -466,7 +492,14 @@ export const unlockAchievement = async (userId: string, achievementId: number): 
 
 export const getUserAchievements = async (userId: string): Promise<UserAchievement[]> => {
   try {
-    const userRef = doc(db, 'user_profiles', userId)
+    // First, get the user profile to find the correct document ID
+    const userProfile = await getUserProfile(userId)
+    if (!userProfile || !userProfile.id) {
+      console.log(`🏆 No user profile found for ${userId}, returning empty achievements`)
+      return []
+    }
+    
+    const userRef = doc(db, 'user_profiles', userProfile.id)
     const userDoc = await getDoc(userRef)
     
     if (userDoc.exists()) {
@@ -482,7 +515,14 @@ export const getUserAchievements = async (userId: string): Promise<UserAchieveme
 
 export const updateAchievementProgress = async (userId: string, achievementId: number, progress: number, maxProgress: number): Promise<void> => {
   try {
-    const userRef = doc(db, 'user_profiles', userId)
+    // First, get the user profile to find the correct document ID
+    const userProfile = await getUserProfile(userId)
+    if (!userProfile || !userProfile.id) {
+      console.error(`🏆 Cannot update achievement progress: User profile not found for ${userId}`)
+      return
+    }
+    
+    const userRef = doc(db, 'user_profiles', userProfile.id)
     
     // Get current achievements
     const userDoc = await getDoc(userRef)
@@ -498,13 +538,13 @@ export const updateAchievementProgress = async (userId: string, achievementId: n
       
       // Unlock if progress reaches max
       if (progress >= maxProgress && !currentAchievements[achievementIndex].unlockedAt) {
-        currentAchievements[achievementIndex].unlockedAt = serverTimestamp()
+        currentAchievements[achievementIndex].unlockedAt = new Date().toISOString()
       }
     } else {
       // Add new achievement
       const newAchievement: UserAchievement = {
         achievementId,
-        unlockedAt: progress >= maxProgress ? serverTimestamp() : undefined,
+        unlockedAt: progress >= maxProgress ? new Date().toISOString() : undefined,
         progress,
         maxProgress
       }
@@ -522,33 +562,49 @@ export const updateAchievementProgress = async (userId: string, achievementId: n
 
 export const checkAndUnlockAchievements = async (userId: string, userProfile: UserProfile, entries: DiaryEntry[]): Promise<void> => {
   try {
+    // Calculate totals from entries
     const totalWords = entries.reduce((sum, entry) => sum + (entry.metadata?.wordCount || 0), 0)
     const totalEntries = entries.length
     const publicEntries = entries.filter(entry => entry.isPublic).length
     
+    console.log(`🔍 [ACHIEVEMENT DEBUG] Checking achievements for user ${userId}:`, {
+      totalWords,
+      totalEntries,
+      publicEntries,
+      profileTotalEntries: userProfile.totalEntries,
+      profilePublicEntries: userProfile.publicEntries
+    })
+    
     // Check various achievement conditions
     const achievementsToCheck = [
-      { id: 1, condition: () => totalEntries > 0 },
-      { id: 2, condition: () => totalWords >= 100 },
-      { id: 3, condition: () => totalWords >= 500 },
-      { id: 4, condition: () => totalWords >= 1000 },
-      { id: 5, condition: () => totalWords >= 5000 },
-      { id: 6, condition: () => totalEntries >= 3 },
-      { id: 7, condition: () => totalEntries >= 7 },
-      { id: 8, condition: () => totalEntries >= 30 },
-      { id: 9, condition: () => totalEntries >= 100 },
-      { id: 19, condition: () => totalEntries >= 50 },
-      { id: 20, condition: () => totalEntries >= 100 },
-      { id: 24, condition: () => publicEntries >= 5 },
-      { id: 51, condition: () => totalEntries >= 100 },
-      { id: 52, condition: () => totalEntries >= 50 },
-      { id: 53, condition: () => totalEntries >= 25 },
-      { id: 54, condition: () => totalEntries >= 10 },
-      { id: 55, condition: () => totalEntries >= 5 }
+      { id: 1, condition: () => totalEntries > 0, name: "First Whisper" },
+      { id: 2, condition: () => totalWords >= 100, name: "The First Page" },
+      { id: 3, condition: () => totalWords >= 500, name: "A Thousand Thoughts" },
+      { id: 4, condition: () => totalWords >= 1000, name: "Ink River" },
+      { id: 5, condition: () => totalWords >= 5000, name: "Word Mountain" },
+      { id: 6, condition: () => totalEntries >= 2, name: "Day One Flame" },
+      { id: 7, condition: () => totalEntries >= 3, name: "The Third Dawn" },
+      { id: 8, condition: () => totalEntries >= 7, name: "Week of Whispers" },
+      { id: 9, condition: () => totalEntries >= 14, name: "The Fortnight Flame" },
+      { id: 10, condition: () => totalEntries >= 30, name: "The Moon's Cycle" },
+      { id: 11, condition: () => totalEntries >= 90, name: "Seasoned Scribe" },
+      { id: 12, condition: () => totalEntries >= 365, name: "The Yearling Writer" },
+      { id: 13, condition: () => totalEntries >= 500, name: "Unbroken Chain" },
+      { id: 14, condition: () => totalEntries >= 1000, name: "Eternal Streak" },
+      { id: 15, condition: () => totalEntries >= 2000, name: "Diary Deity" },
+      { id: 19, condition: () => totalEntries >= 50, name: "Memory Keeper" },
+      { id: 20, condition: () => totalEntries >= 100, name: "Digital Archivist" },
+      { id: 24, condition: () => publicEntries >= 5, name: "Public Speaker" },
+      { id: 51, condition: () => totalEntries >= 100, name: "Century Club" },
+      { id: 52, condition: () => totalEntries >= 50, name: "Halfway There" },
+      { id: 53, condition: () => totalEntries >= 25, name: "Quarter Master" },
+      { id: 54, condition: () => totalEntries >= 10, name: "Decade" },
+      { id: 55, condition: () => totalEntries >= 5, name: "First Five" }
     ]
     
     for (const achievement of achievementsToCheck) {
       if (achievement.condition()) {
+        console.log(`🏆 [ACHIEVEMENT DEBUG] Unlocking achievement: ${achievement.name} (ID: ${achievement.id})`)
         await unlockAchievement(userId, achievement.id)
       }
     }

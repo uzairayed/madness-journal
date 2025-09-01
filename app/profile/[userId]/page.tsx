@@ -247,7 +247,7 @@ export default function UserProfilePage() {
                           </div>
                           {userAchievement.unlockedAt && (
                             <div className="text-xs mt-1 text-gray-500">
-                              Unlocked: {userAchievement.unlockedAt.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                              Unlocked: {new Date(userAchievement.unlockedAt).toLocaleDateString()}
                             </div>
                           )}
                         </div>
