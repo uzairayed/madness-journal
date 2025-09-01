@@ -28,6 +28,7 @@ export default function ReadPage() {
       try {
         setLoading(true)
         setError(null)
+        
         // Use optimized function with limit for better performance
         const userEntries = await getUserDiaryEntries(user.uid, 50)
         setEntries(userEntries)
