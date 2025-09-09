@@ -30,29 +30,38 @@ interface CacheEntry {
 const entryCache = new Map<string, CacheEntry>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// ✅ Fixed: Proper metadata interface with all possible fields
+export interface DiaryEntryMetadata {
+  wordCount: number;
+  characterCount: number;
+  unlockTime?: string; // ISO timestamp string
+  isLocked?: boolean; // For time-locked entries that are still locked
+  prompt?: string; // For Shadow Journaling mode
+  promptCategory?: string; // For Shadow Journaling mode
+  promptIntensity?: string; // For Shadow Journaling mode
+}
+
 // Firestore functions for diary entries
 export interface DiaryEntry {
-  id: string
-  userId: string
-  mode: string
-  title: string
-  content: string
-  timestamp: any
-  metadata?: {
-    wordCount: number
-    characterCount: number
-  }
-  corruptionLevel?: number
-  isPublic: boolean
-  hiddenLayers?: number
-  timeLocked?: boolean
-  unlockTime?: any
+  id: string;
+  userId: string;
+  mode: string;
+  title: string;
+  content: string;
+  timestamp: any; // Firestore Timestamp
+  metadata?: DiaryEntryMetadata; // ✅ Fixed: Using proper interface
+  corruptionLevel?: number;
+  isPublic: boolean;
+  hiddenLayers?: number;
+  timeLocked?: boolean;
+  unlockTime?: any; // Firestore Timestamp
 }
 
 export interface UserProfile {
   id?: string
   userId: string
   displayName: string
+  email?: string // ✅ Added missing email field
   bio?: string
   avatarUrl?: string
   joinDate: any
@@ -579,27 +588,26 @@ export const checkAndUnlockAchievements = async (userId: string, userProfile: Us
     const achievementsToCheck = [
       { id: 1, condition: () => totalEntries > 0, name: "First Whisper" },
       { id: 2, condition: () => totalWords >= 100, name: "The First Page" },
-      { id: 3, condition: () => totalWords >= 500, name: "A Thousand Thoughts" },
-      { id: 4, condition: () => totalWords >= 1000, name: "Ink River" },
-      { id: 5, condition: () => totalWords >= 5000, name: "Word Mountain" },
-      { id: 6, condition: () => totalEntries >= 2, name: "Day One Flame" },
-      { id: 7, condition: () => totalEntries >= 3, name: "The Third Dawn" },
-      { id: 8, condition: () => totalEntries >= 7, name: "Week of Whispers" },
-      { id: 9, condition: () => totalEntries >= 14, name: "The Fortnight Flame" },
-      { id: 10, condition: () => totalEntries >= 30, name: "The Moon's Cycle" },
-      { id: 11, condition: () => totalEntries >= 90, name: "Seasoned Scribe" },
-      { id: 12, condition: () => totalEntries >= 365, name: "The Yearling Writer" },
-      { id: 13, condition: () => totalEntries >= 500, name: "Unbroken Chain" },
-      { id: 14, condition: () => totalEntries >= 1000, name: "Eternal Streak" },
-      { id: 15, condition: () => totalEntries >= 2000, name: "Diary Deity" },
-      { id: 19, condition: () => totalEntries >= 50, name: "Memory Keeper" },
-      { id: 20, condition: () => totalEntries >= 100, name: "Digital Archivist" },
-      { id: 24, condition: () => publicEntries >= 5, name: "Public Speaker" },
-      { id: 51, condition: () => totalEntries >= 100, name: "Century Club" },
-      { id: 52, condition: () => totalEntries >= 50, name: "Halfway There" },
-      { id: 53, condition: () => totalEntries >= 25, name: "Quarter Master" },
-      { id: 54, condition: () => totalEntries >= 10, name: "Decade" },
-      { id: 55, condition: () => totalEntries >= 5, name: "First Five" }
+      { id: 3, condition: () => totalWords >= 1000, name: "A Thousand Thoughts" },
+      { id: 4, condition: () => totalWords >= 5000, name: "Ink River" },
+      { id: 5, condition: () => totalWords >= 10000, name: "Word Mountain" },
+      { id: 6, condition: () => totalWords >= 20000, name: "Library Seed" },
+      { id: 7, condition: () => totalWords >= 50000, name: "Forest of Words" },
+      { id: 8, condition: () => totalWords >= 100000, name: "Ink Empire" },
+      { id: 9, condition: () => totalWords >= 1000000, name: "Million Echoes" },
+      { id: 10, condition: () => totalWords >= 2000000, name: "The Endless Pen" },
+      { id: 11, condition: () => totalEntries >= 2, name: "Day One Flame" },
+      { id: 12, condition: () => totalEntries >= 3, name: "The Third Dawn" },
+      { id: 13, condition: () => totalEntries >= 7, name: "Week of Whispers" },
+      { id: 14, condition: () => totalEntries >= 14, name: "The Fortnight Flame" },
+      { id: 15, condition: () => totalEntries >= 30, name: "The Moon's Cycle" },
+      { id: 16, condition: () => totalEntries >= 90, name: "Seasoned Scribe" },
+      { id: 17, condition: () => totalEntries >= 365, name: "The Yearling Writer" },
+      { id: 18, condition: () => totalEntries >= 500, name: "Unbroken Chain" },
+      { id: 79, condition: () => totalEntries >= 100, name: "Soul Librarian" },
+      { id: 80, condition: () => totalEntries >= 500, name: "The Eternal Archive" },
+      { id: 87, condition: () => publicEntries >= 1, name: "Shared Whisper" },
+      { id: 89, condition: () => publicEntries >= 10, name: "Public Confessor" }
     ]
     
     for (const achievement of achievementsToCheck) {
@@ -612,5 +620,79 @@ export const checkAndUnlockAchievements = async (userId: string, userProfile: Us
     console.error('Error checking achievements:', error)
   }
 }
+
+// Check if a time-locked entry should be accessible
+export const isEntryUnlocked = (entry: DiaryEntry): boolean => {
+  // If it's not a time-locked entry, it's always accessible
+  if (entry.mode !== 'timelocked' || !entry.metadata?.unlockTime) {
+    return true;
+  }
+  
+  // Check if current time has passed the unlock time
+  const unlockTime = new Date(entry.metadata.unlockTime);
+  const now = new Date();
+  
+  return now >= unlockTime;
+};
+
+// Filter entries to only return unlocked ones (for reading)
+export const filterUnlockedEntries = (entries: DiaryEntry[]): DiaryEntry[] => {
+  return entries.filter(entry => isEntryUnlocked(entry));
+};
+
+// Get unlocked diary entries for a user
+export const getUnlockedUserDiaryEntries = async (userId: string, limitCount: number = 50) => {
+  try {
+    // Get all entries first
+    const allEntries = await getUserDiaryEntries(userId, limitCount);
+    
+    // Filter to only unlocked entries
+    const unlockedEntries = filterUnlockedEntries(allEntries);
+    
+    return unlockedEntries;
+  } catch (error: any) {
+    console.error('Error getting unlocked diary entries:', error);
+    throw error;
+  }
+};
+
+// Get a single entry with time-lock check
+export const getDiaryEntryById = async (entryId: string, userId: string): Promise<DiaryEntry | null> => {
+  try {
+    const entryRef = doc(db, 'diary_entries', entryId);
+    const entrySnap = await getDoc(entryRef);
+    
+    if (!entrySnap.exists()) {
+      return null;
+    }
+    
+    const entry = { id: entrySnap.id, ...entrySnap.data() } as DiaryEntry;
+    
+    // Verify user owns the entry
+    if (entry.userId !== userId) {
+      throw new Error('Unauthorized access to entry');
+    }
+    
+    // For time-locked entries, check if they're unlocked
+    if (entry.mode === 'timelocked' && !isEntryUnlocked(entry)) {
+      // Return entry with locked content
+      return {
+        ...entry,
+        content: '[LOCKED UNTIL UNLOCK TIME]',
+        metadata: {
+          wordCount: entry.metadata?.wordCount || 0,
+          characterCount: entry.metadata?.characterCount || 0,
+          unlockTime: entry.metadata?.unlockTime,
+          isLocked: true
+        }
+      };
+    }
+    
+    return entry;
+  } catch (error: any) {
+    console.error('Error getting diary entry:', error);
+    throw error;
+  }
+};
 
 export default app; 

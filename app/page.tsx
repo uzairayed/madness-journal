@@ -7,8 +7,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import Link from "next/link"
 import { LogOut, User, BookOpen, PenTool, Eye, Sparkles } from "lucide-react"
 import { useAuth } from "@/components/firebase-auth-provider"
-import { useEffect, useState } from "react"
-import { getUserDiaryEntries, getUserProfile, createUserProfile, UserProfile, DiaryEntry, getUserAchievements, checkAndUnlockAchievements } from "@/lib/firebase"
+import { useEffect, useState, useCallback, useMemo } from "react"
+import { getUserDiaryEntries, getUnlockedUserDiaryEntries, getUserProfile, createUserProfile, UserProfile, DiaryEntry, getUserAchievements, checkAndUnlockAchievements } from "@/lib/firebase"
+import { getTotalWordCount } from "@/lib/utils"
 
 export default function HomePage() {
   const { user, loading, signOut } = useAuth()
@@ -161,12 +162,36 @@ export default function HomePage() {
     { id: 100, name: "Immortal Ink", description: "Journaled across 5 different years", condition: "Write in 5 different calendar years", icon: "📅", unlocked: false }
   ]
 
-  // Achievement unlock logic based on user data and backend
-  const updateAchievements = async () => {
-    if (!user || !userProfile) return achievements
+  // Get achievements with current unlock status
+  const [currentAchievements, setCurrentAchievements] = useState(achievements)
+  const [achievementNotifications, setAchievementNotifications] = useState<Array<{id: number, achievement: any, timestamp: number}>>([])
+  const [sessionNotifiedAchievements, setSessionNotifiedAchievements] = useState<Set<number>>(new Set())
 
+  // Load previously notified achievements from localStorage and combine with session tracking
+  const getNotifiedAchievements = useCallback((): Set<number> => {
+    if (!user) return new Set()
+    
+    const stored = localStorage.getItem(`notified-achievements-${user.uid}`)
+    let persistentNotified = new Set<number>()
+    
+    if (stored) {
+      try {
+        persistentNotified = new Set(JSON.parse(stored))
+      } catch (error) {
+        console.error('Error loading notified achievements:', error)
+      }
+    }
+    
+    // Combine persistent and session notifications
+    return new Set([...persistentNotified, ...sessionNotifiedAchievements])
+  }, [user, sessionNotifiedAchievements])
+
+  // Memoize updateAchievements function
+  const updateAchievements = useCallback(async () => {
+    if (!user || !userProfile) return achievements; // ✅ Fix: Return default achievements instead of undefined
+    
     try {
-      // Get user's achievements from backend
+      // Get achievements with current unlock status
       const userAchievements = await getUserAchievements(user.uid)
       const unlockedAchievementIds = userAchievements.map(ua => ua.achievementId)
       
@@ -200,37 +225,63 @@ export default function HomePage() {
       return achievements.map(achievement => {
         let unlocked = false
         
-        // Basic mock logic for fallback
+        // Mock achievement check based on available data
         switch (achievement.id) {
           case 1: // First Whisper
             unlocked = userProfile.totalEntries > 0
             break
-          case 2: // The First Page
-            unlocked = userProfile.totalEntries >= 3 // Mock: assume average 50 words per entry
+          case 2: // The First Page - 100 words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 100
+            }
             break
-          case 3: // A Thousand Thoughts
-            unlocked = userProfile.totalEntries >= 20
+          case 3: // A Thousand Thoughts - 1,000 words  
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 1000
+            }
             break
-          case 4: // Ink River
-            unlocked = userProfile.totalEntries >= 100
+          case 4: // Ink River - 5,000 words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 5000
+            }
             break
-          case 5: // Word Mountain
-            unlocked = userProfile.totalEntries >= 200
+          case 5: // Word Mountain - 10,000 words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 10000
+            }
             break
-          case 6: // Library Seed
-            unlocked = userProfile.totalEntries >= 400
+          case 6: // Library Seed - 20,000 words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 20000
+            }
             break
-          case 7: // Forest of Words
-            unlocked = userProfile.totalEntries >= 1000
+          case 7: // Forest of Words - 50,000 words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 50000
+            }
             break
-          case 8: // Ink Empire
-            unlocked = userProfile.totalEntries >= 2000
+          case 8: // Ink Empire - 100,000 words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 100000
+            }
             break
-          case 9: // Million Echoes
-            unlocked = userProfile.totalEntries >= 20000
+          case 9: // Million Echoes - Word count achievement  
+            // Calculate word count from entries
+            const totalWordCount = getTotalWordCount(diaryEntries)
+            unlocked = totalWordCount >= 1000000
             break
-          case 10: // The Endless Pen
-            unlocked = userProfile.totalEntries >= 40000
+          case 10: // The Endless Pen - 2,000,000+ words
+            {
+              const totalWordCount = getTotalWordCount(diaryEntries)
+              unlocked = totalWordCount >= 2000000
+            }
             break
           case 11: // Day One Flame
             unlocked = userProfile.totalEntries >= 2
@@ -285,57 +336,77 @@ export default function HomePage() {
         return { ...achievement, unlocked }
       })
     }
-  }
+  }, [user, userProfile, diaryEntries, achievements])
 
-  // Get achievements with current unlock status
-  const [currentAchievements, setCurrentAchievements] = useState(achievements)
-  const [achievementNotifications, setAchievementNotifications] = useState<Array<{id: number, achievement: any, timestamp: number}>>([])
-
-  // Update achievements when user data changes
+  // Update achievements when user data changes - with better dependency management
   useEffect(() => {
     if (user && userProfile) {
       console.log('🔍 [ACHIEVEMENT DEBUG] Starting achievement update for user:', user.uid)
       console.log('🔍 [ACHIEVEMENT DEBUG] User profile:', userProfile)
       console.log('🔍 [ACHIEVEMENT DEBUG] Diary entries count:', diaryEntries.length)
       
-      updateAchievements().then(updatedAchievements => {
-        console.log('🔍 [ACHIEVEMENT DEBUG] Updated achievements:', updatedAchievements.filter(a => a.unlocked))
-        
-        // Check for newly unlocked achievements
-        const previouslyUnlocked = currentAchievements.filter(a => a.unlocked).map(a => a.id)
-        const newlyUnlocked = updatedAchievements.filter(a => a.unlocked && !previouslyUnlocked.includes(a.id))
+      updateAchievements().then((updatedAchievements) => {
+        // ✅ Fix: Use the returned achievements to update state
+        if (updatedAchievements) {
+          setCurrentAchievements(updatedAchievements)
+          console.log('🔍 [ACHIEVEMENT DEBUG] Updated achievements:', updatedAchievements.filter(a => a.unlocked))
+          
+          // Check for newly unlocked achievements compared to previous state  
+          const previouslyUnlocked = currentAchievements.filter(a => a.unlocked).map(a => a.id)
+          const newlyUnlocked = updatedAchievements.filter(a => a.unlocked && !previouslyUnlocked.includes(a.id))
         
         console.log('🔍 [ACHIEVEMENT DEBUG] Previously unlocked:', previouslyUnlocked)
         console.log('🔍 [ACHIEVEMENT DEBUG] Newly unlocked:', newlyUnlocked)
         
-        // Show notifications for newly unlocked achievements
-        newlyUnlocked.forEach(achievement => {
-          console.log('🎉 [ACHIEVEMENT UNLOCKED]', achievement.name)
-          const notification = {
-            id: Date.now() + Math.random(),
-            achievement,
-            timestamp: Date.now()
-          }
-          setAchievementNotifications(prev => [...prev, notification])
-          
-          // Auto-remove notification after 5 seconds
-          setTimeout(() => {
-            setAchievementNotifications(prev => prev.filter(n => n.id !== notification.id))
-          }, 5000)
-        })
+        const allNotified = getNotifiedAchievements()
         
-        setCurrentAchievements(updatedAchievements)
-      })
-      
-      // Also check achievements directly from backend to ensure sync
-      if (diaryEntries.length > 0) {
-        console.log('🔍 [ACHIEVEMENT DEBUG] Checking achievements from backend...')
+        // Show notifications for achievements that are both newly unlocked AND never been notified
+        newlyUnlocked.forEach(achievement => {
+          if (!allNotified.has(achievement.id)) {
+            console.log('🎉 [ACHIEVEMENT UNLOCKED]', achievement.name)
+            
+            const notification = {
+              id: Date.now() + Math.random(),
+              achievement,
+              timestamp: Date.now()
+            }
+            setAchievementNotifications(prev => [...prev, notification])
+            
+            // Add to session notifications
+            setSessionNotifiedAchievements(prev => new Set([...prev, achievement.id]))
+            
+            // Also save to localStorage for persistence
+            const currentPersistent = localStorage.getItem(`notified-achievements-${user.uid}`)
+            let persistentSet = new Set<number>()
+            if (currentPersistent) {
+              try {
+                persistentSet = new Set(JSON.parse(currentPersistent))
+              } catch (error) {
+                console.error('Error loading persistent notifications:', error)
+              }
+            }
+            persistentSet.add(achievement.id)
+            localStorage.setItem(`notified-achievements-${user.uid}`, JSON.stringify(Array.from(persistentSet)))
+            
+            // Auto-remove notification after 5 seconds
+            setTimeout(() => {
+              setAchievementNotifications(prev => prev.filter(n => n.id !== notification.id))
+            }, 5000)
+          } else {
+            console.log('🔍 [NOTIFICATION DEBUG] Achievement already notified:', achievement.id, achievement.name)
+          }
+        })
+        } else {
+          console.log('🔍 [ACHIEVEMENT DEBUG] No updated achievements returned')
+        }
+        
+        // Also check achievements directly from backend to ensure sync
         import('@/lib/firebase').then(({ checkAndUnlockAchievements }) => {
           checkAndUnlockAchievements(user.uid, userProfile, diaryEntries)
         }).catch(console.error)
-      }
+      })
     }
-  }, [user, userProfile, diaryEntries])
+  }, [user, userProfile, diaryEntries, updateAchievements, getNotifiedAchievements])
 
   // Fetch diary entries and create activity map
   useEffect(() => {
@@ -600,6 +671,16 @@ export default function HomePage() {
                 </div>
               </div>
               
+              {/* Navigation */}
+              <div className="border-t border-gray-600/50">
+                <DropdownMenuItem asChild>
+                  <Link href="/about" className="text-gray-300 hover:text-white hover:bg-gray-700/20 focus:bg-gray-700/20">
+                    <BookOpen className="mr-2 h-4 w-4" />
+                    <span>About & Help</span>
+                  </Link>
+                </DropdownMenuItem>
+              </div>
+              
               {/* Profile Management */}
               <div className="border-t border-gray-600/50">
                 <DropdownMenuItem asChild>
@@ -769,8 +850,8 @@ export default function HomePage() {
             <div className="text-gray-400">Time-Locked</div>
           </div>
           <div className="text-left">
-            <div className="text-2xl font-bold text-green-400">{stats.echo || 0}</div>
-            <div className="text-gray-400">Echo Mode</div>
+            
+            
           </div>
         </div>
         

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { ArrowLeft, Clock, Eye, Sparkles, Loader2 } from "lucide-react"
 import { useAuth } from "@/components/firebase-auth-provider"
-import { getUserDiaryEntries, DiaryEntry } from "@/lib/firebase"
+import { getUserDiaryEntries, getUnlockedUserDiaryEntries, isEntryUnlocked, DiaryEntry } from "@/lib/firebase"
 
 export default function ReadPage() {
   const { user } = useAuth()
@@ -17,7 +17,7 @@ export default function ReadPage() {
   const [selectedEntry, setSelectedEntry] = useState<DiaryEntry | null>(null)
   const [showAlternatives, setShowAlternatives] = useState(false)
 
-  // Fetch user's diary entries
+  // Fetch user's diary entries (only unlocked ones)
   useEffect(() => {
     const fetchEntries = async () => {
       if (!user) {
@@ -29,8 +29,8 @@ export default function ReadPage() {
         setLoading(true)
         setError(null)
         
-        // Use optimized function with limit for better performance
-        const userEntries = await getUserDiaryEntries(user.uid, 50)
+        // Use unlocked entries function to respect time-locks
+        const userEntries = await getUnlockedUserDiaryEntries(user.uid, 50)
         setEntries(userEntries)
       } catch (err) {
         console.error('Error fetching entries:', err)
@@ -68,11 +68,6 @@ export default function ReadPage() {
         name: "Time-Locked Mode",
         icon: "⏰",
         color: "bg-blue-500/20 text-blue-700 border-blue-500/30"
-      },
-      echo: {
-        name: "Echo Mode",
-        icon: "🔊",
-        color: "bg-green-500/20 text-green-700 border-green-500/30"
       },
       shadow: {
         name: "Shadow Journaling Mode",
@@ -145,19 +140,26 @@ export default function ReadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 relative overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-purple-500 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute top-3/4 right-1/4 w-40 h-40 bg-blue-500 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 w-24 h-24 bg-pink-500 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+      </div>
+      
+      <div className="max-w-4xl mx-auto space-y-6 relative z-10">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm">
+        <div className="relative flex justify-center">
+          <Link href="/" className="absolute left-0 top-0">
+            <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Home
             </Button>
           </Link>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">Read Diary</h1>
-            <p className="text-muted-foreground">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white">Read Diary</h1>
+            <p className="text-gray-300">
               {entries.length > 0 
                 ? `You have ${entries.length} entries in your journal`
                 : "No entries yet. Start writing to see them here."
@@ -168,16 +170,16 @@ export default function ReadPage() {
 
         {/* Alternative Reality Toggle */}
         <div className="flex justify-center">
-          <Card className="p-4 border-2 border-indigo-500/30">
+          <Card className="p-4 border-2 border-indigo-500/30 bg-black/40 backdrop-blur-sm">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-500" />
-                <span className="font-semibold text-foreground">Alternative Reality Mode</span>
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+                <span className="font-semibold text-white">Alternative Reality Mode</span>
               </div>
               <Button
                 variant={showAlternatives ? "default" : "outline"}
                 onClick={() => setShowAlternatives(!showAlternatives)}
-                className="bg-indigo-500 hover:bg-indigo-600"
+                className="bg-indigo-500 hover:bg-indigo-600 text-white"
               >
                 {showAlternatives ? "Show Original" : "Show Alternatives"}
               </Button>

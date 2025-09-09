@@ -1,0 +1,39 @@
+﻿"use client"
+
+import { useState, useEffect, useRef } from "react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
+import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
+import { useParams } from "next/navigation"
+import { useAuth } from "@/components/firebase-auth-provider"
+import { saveDiaryEntry, DiaryEntry } from '@/lib/firebase'
+
+const modeConfigs = {
+  madness: {
+    name: "Madness Journal",
+    icon: "",
+    description: "Progressive text corruption and visual glitches"
+  },
+  timelocked: {
+    name: "Time-Locked Mode",
+    icon: "",
+    description: "Entries are locked for a specific duration"
+  },
+  shadow: {
+    name: "Shadow Journaling Mode",
+    icon: "",
+    description: "Hidden layers of text"
+  },
+  irreversible: {
+    name: "Irreversible Mode",
+    icon: "",
+    description: "Once written, cannot be edited"
+  },
+  alternative: {
+    name: "Alternative Reality Mode",
+    icon: "",
+    description: "Parallel versions in different realities"
+  }
+}

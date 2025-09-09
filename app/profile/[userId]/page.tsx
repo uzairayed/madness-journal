@@ -9,6 +9,7 @@ import { BookOpen, Calendar, Eye, PenTool, User } from "lucide-react"
 import Link from "next/link"
 import { getUserProfile, getPublicDiaryEntries, UserProfile, DiaryEntry, getUserAchievements } from "@/lib/firebase"
 import { useAuth } from "@/components/firebase-auth-provider"
+import { sanitizeText } from "@/lib/utils" // ✅ Added sanitization import
 
 export default function UserProfilePage() {
   const params = useParams()
@@ -20,6 +21,7 @@ export default function UserProfilePage() {
   const [userAchievements, setUserAchievements] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
 
   // Achievement data (same as home page)
   const allAchievements = [
@@ -85,32 +87,27 @@ export default function UserProfilePage() {
       madness: {
         name: "Madness Journal",
         icon: "🌀",
-        color: "bg-purple-500/20 text-purple-700 border-purple-500/30"
+        color: "bg-purple-500/20 text-purple-300 border-purple-500/30"
       },
       timelocked: {
-        name: "Time-Locked Mode",
+        name: "Time Capsule Mode",
         icon: "⏰",
-        color: "bg-blue-500/20 text-blue-700 border-blue-500/30"
-      },
-      echo: {
-        name: "Echo Mode",
-        icon: "🔊",
-        color: "bg-green-500/20 text-green-700 border-green-500/30"
+        color: "bg-blue-500/20 text-blue-300 border-blue-500/30"
       },
       shadow: {
-        name: "Shadow Journaling Mode",
-        icon: "👤",
-        color: "bg-purple-500/20 text-purple-700 border-purple-500/30"
+        name: "Shadow Journaling",
+        icon: "🔮",
+        color: "bg-gray-500/20 text-gray-300 border-gray-500/30"
       },
       irreversible: {
         name: "Irreversible Mode",
-        icon: "🔒",
-        color: "bg-red-500/20 text-red-700 border-red-500/30"
+        icon: "🧊",
+        color: "bg-red-500/20 text-red-300 border-red-500/30"
       },
       alternative: {
         name: "Alternative Reality Mode",
         icon: "🌌",
-        color: "bg-indigo-500/20 text-indigo-700 border-indigo-500/30"
+        color: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
       }
     }
     return configs[mode as keyof typeof configs] || configs.madness
@@ -119,6 +116,18 @@ export default function UserProfilePage() {
   const getPreview = (content: string, maxLength: number = 150) => {
     if (content.length <= maxLength) return content
     return content.substring(0, maxLength) + "..."
+  }
+
+  const toggleEntryExpansion = (entryId: string) => {
+    setExpandedEntries(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(entryId)) {
+        newSet.delete(entryId)
+      } else {
+        newSet.add(entryId)
+      }
+      return newSet
+    })
   }
 
   if (loading) {
@@ -147,8 +156,15 @@ export default function UserProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 relative overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-purple-500 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute top-3/4 right-1/4 w-40 h-40 bg-blue-500 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 w-24 h-24 bg-pink-500 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+      </div>
+      
+      <div className="max-w-4xl mx-auto space-y-6 relative z-10">
         {/* Header */}
         <div className="text-center">
           <Link href="/">
@@ -159,7 +175,7 @@ export default function UserProfilePage() {
         </div>
 
         {/* Profile Card */}
-        <Card className="p-8 text-center">
+        <Card className="p-8 text-center bg-black/40 backdrop-blur-sm border-gray-700">
           <div className="space-y-6">
             {/* Avatar */}
             <div className="flex justify-center">
@@ -208,7 +224,7 @@ export default function UserProfilePage() {
         </Card>
 
         {/* User Achievements */}
-        <Card className="p-6">
+        <Card className="p-6 bg-black/40 backdrop-blur-sm border-gray-700">
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold text-white">Achievements</h3>
@@ -269,7 +285,7 @@ export default function UserProfilePage() {
         </Card>
 
         {/* Writing Activity - Contribution Grid */}
-        <Card className="p-6">
+        <Card className="p-6 bg-black/40 backdrop-blur-sm border-gray-700">
           <div className="space-y-4">
             {/* Header with Title and Legend */}
             <div className="flex justify-between items-start">
@@ -347,7 +363,7 @@ export default function UserProfilePage() {
               {entries.map((entry) => {
                 const modeConfig = getModeConfig(entry.mode)
                 return (
-                  <Card key={entry.id} className="p-6">
+                  <Card key={entry.id} className="p-6 bg-black/40 backdrop-blur-sm border-gray-700">
                     <div className="space-y-4">
                       {/* Entry Header */}
                       <div className="flex items-start justify-between">
@@ -365,9 +381,36 @@ export default function UserProfilePage() {
                       </div>
 
                       {/* Entry Content */}
-                      <p className="text-gray-300 leading-relaxed">
-                        {getPreview(entry.content)}
-                      </p>
+                      <div className="space-y-3">
+                        <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">
+                          {expandedEntries.has(entry.id) 
+                            ? sanitizeText(entry.content) 
+                            : sanitizeText(getPreview(entry.content))
+                          }
+                        </p>
+                        
+                        {/* Read More/Less Button */}
+                        {entry.content.length > 150 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleEntryExpansion(entry.id)}
+                            className="text-purple-400 hover:text-purple-300 p-0 h-auto font-normal"
+                          >
+                            {expandedEntries.has(entry.id) ? (
+                              <>
+                                <Eye className="w-4 h-4 mr-1" />
+                                Show Less
+                              </>
+                            ) : (
+                              <>
+                                <BookOpen className="w-4 h-4 mr-1" />
+                                Read Full Entry
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
 
                       {/* Entry Footer */}
                       <div className="flex items-center justify-between text-sm text-gray-400">
@@ -375,11 +418,19 @@ export default function UserProfilePage() {
                           <span>{entry.metadata?.wordCount || 0} words</span>
                           <span>{entry.metadata?.characterCount || 0} characters</span>
                         </div>
-                        {entry.corruptionLevel && (
-                          <span className="text-purple-400">
-                            Corruption Level: {entry.corruptionLevel}/10
-                          </span>
-                        )}
+                        <div className="flex items-center space-x-4">
+                          {entry.corruptionLevel && (
+                            <span className="text-purple-400">
+                              Corruption Level: {entry.corruptionLevel}/10
+                            </span>
+                          )}
+                          {/* Show prompt info for Shadow Journal entries */}
+                          {entry.mode === 'shadow' && (entry.metadata as any)?.prompt && (
+                            <span className="text-gray-500 text-xs italic">
+                              Prompt: {((entry.metadata as any).prompt as string).slice(0, 30)}...
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </Card>
@@ -388,7 +439,7 @@ export default function UserProfilePage() {
             </div>
           </div>
         ) : (
-          <Card className="p-8 text-center">
+          <Card className="p-8 text-center bg-black/40 backdrop-blur-sm border-gray-700">
             <div className="space-y-4">
               <BookOpen className="w-16 h-16 text-gray-400 mx-auto" />
               <h3 className="text-xl font-semibold text-white">No Public Entries</h3>
