@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
@@ -38,17 +38,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log(' [AUTH DEBUG] Initializing Firebase Auth...');
-    
-    // Check Firebase config
-    console.log(' [AUTH DEBUG] Firebase config check:', {
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-    });
-
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log(' [AUTH DEBUG] Auth state changed:', user ? `User: ${user.email}` : 'No user');
       setUser(user);
       setLoading(false);
     });
@@ -56,24 +46,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Check for redirect result
     getRedirectResult(auth).then((result) => {
       if (result) {
-        console.log(' [AUTH DEBUG] Sign-in successful via redirect:', result.user.email);
-      } else {
-        console.log(' [AUTH DEBUG] No redirect result found');
+        console.log('Sign-in successful via redirect:', result.user.email);
       }
     }).catch((error) => {
-      console.error(' [AUTH ERROR] Error getting redirect result:', error);
+      console.error('Error getting redirect result:', error);
     });
 
-    return () => {
-      console.log(' [AUTH DEBUG] Cleaning up auth listener');
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const signInWithGoogle = async () => {
     try {
-      console.log(' [AUTH DEBUG] Starting Google sign-in...');
-      console.log(' [AUTH DEBUG] Firebase config:', {
+      console.log('Starting Google sign-in...');
+      console.log('Firebase config:', {
         authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
       });
@@ -86,17 +71,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Try popup first, fallback to redirect
       try {
-        console.log(' [AUTH DEBUG] Attempting to sign in with popup...');
+        console.log('Attempting to sign in with popup...');
         const result = await signInWithPopup(auth, provider);
-        console.log(' [AUTH DEBUG] Sign-in successful:', result.user.email);
+        console.log('Sign-in successful:', result.user.email);
       } catch (popupError: any) {
-        console.log(' [AUTH DEBUG] Popup failed, trying redirect...', popupError.code);
+        console.log('Popup failed, trying redirect...', popupError.code);
         
         if (popupError.code === 'auth/popup-closed-by-user' || 
             popupError.code === 'auth/popup-blocked' ||
             popupError.code === 'auth/cancelled-popup-request') {
           
-          console.log(' [AUTH DEBUG] Using redirect fallback...');
+          console.log('Using redirect fallback...');
           await signInWithRedirect(auth, provider);
           return; // Redirect will happen, no need to throw error
         }
@@ -105,26 +90,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       
     } catch (error: any) {
-      console.error(' [AUTH ERROR] Error signing in with Google:', error);
+      console.error('Error signing in with Google:', error);
       
       // Log specific error details
       if (error.code) {
-        console.error(' [AUTH ERROR] Error code:', error.code);
+        console.error('Error code:', error.code);
       }
       if (error.message) {
-        console.error(' [AUTH ERROR] Error message:', error.message);
+        console.error('Error message:', error.message);
       }
       
       // Handle specific error cases
       if (error.code === 'auth/unauthorized-domain') {
-        console.error(' [AUTH ERROR] Domain not authorized in Firebase console');
+        console.error('Domain not authorized in Firebase console');
         alert('Authentication error: Domain not authorized. Please check Firebase console settings.');
       } else if (error.code === 'auth/popup-blocked') {
-        console.error(' [AUTH ERROR] Popup was blocked by browser');
+        console.error('Popup was blocked by browser');
         alert('Please allow popups for this site and try again.');
-      } else if (error.code === 'auth/network-request-failed') {
-        console.error(' [AUTH ERROR] Network request failed');
-        alert('Network error. Please check your internet connection and try again.');
       } else {
         alert(`Authentication error: ${error.message || 'Unknown error occurred'}`);
       }
@@ -135,11 +117,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = async () => {
     try {
-      console.log(' [AUTH DEBUG] Signing out...');
       await firebaseSignOut(auth);
-      console.log(' [AUTH DEBUG] Sign out successful');
     } catch (error) {
-      console.error(' [AUTH ERROR] Error signing out:', error);
+      console.error('Error signing out:', error);
       throw error;
     }
   };
@@ -156,4 +136,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
       {children}
     </AuthContext.Provider>
   );
-}
+} 
